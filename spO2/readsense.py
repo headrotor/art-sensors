@@ -7,196 +7,90 @@ import serial
 import sys
 import time
 import threading
-import traceback
+"""
 
-#local serial wrapper
-import serial_io
+         7D 81 A7 80 80 80 80 80 80  0C 80 
+         7D 81 A2 80 80 80 80 80 80  0C 80 
+         7D 81 A0 80 80 80 80 80 80  06 80 80 87 
+         7D 81 B0 80 80 80 80 80 80  11 80 81 81 80 80 80 80 80 
+         7D 81 AC 80 80 80 80 80 80  0E 80 81 
+         7D 81 B3 80 80 80 80 80 80  13 80 A0 A0 A0 A0 A0 A0 A0 14 80 A0 A0 A0 A0 A0 80 80  
+         7D 81 A8 80 80 80 80 80 80  02 80 80 A0 A0 A0 A0 A0 A0 02 81 FF A0 A0 A0 A0 A0 A0 
+         7D 81 AA 80 80 80 80 80 80  04 80 F5 F3 E5 F2 A0 A0 A0 
+         7D 81 A9 80 80 80 80 80 80  03 80 A0 A0 A0 A0 A0 A0 A0 
+         7D 81 A1 80 80 80 80 80 80  
+         01 E0 85 B3 96 C1 E1 FF FF 
+         01 E0 85 B0 96 C1 E1 FF FF 
+         01 E0 85 AE 95 C1 E1 FF FF 
+         01 E0 85 AC 95 C1 E1 FF FF 
+         01 E0 85 AB 95 C1 E1 FF FF 
+         01 E0 85 AA 95 C1 E1 FF FF 
+         01 E0 85 AA 95 C1 E1 FF FF 
+         01 E0 85 AA 95 C1 E1 FF FF 
+         01 E0 85 AA 95 C1 E1 FF FF 
+         01 E0 85 A9 95 C1 E1 FF FF 
+         01 E0 85 A8 95 C1 E1 FF FF 
+         01 E0 85 A7 94 C1 E1 FF FF 
+         01 E0 85 A5 94 C1 E1 FF FF 
+         01 E0 85 A4 94 C1 E1 FF FF 
+         01 E0 85 A2 94 C1 E1 FF FF 
+         01 E0 85 A1 94 C1 E1 FF FF 
+         01 E0 85 9F 93 C1 E1 FF FF 
+         01 E0 85 9E 93 C1 E1 FF FF 
+         01 E0 85 9D 93 C1 E1 FF FF 
+         01 E0 85 9C 93 C1 E1 FF FF 
+         01 E0 85 9B 93 C1 E1 FF FF 
+         01 E0 85 9A 93 C1 E1 FF FF 
+         01 E0 85 99 93 C1 E1 FF FF 
+         01 E0 85 98 93 C1 E1 FF FF  
+         01 E0 85 98 93 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 97 92 C1 E1 FF FF 
+         01 E0 85 96 92 C1 E1 FF FF 
+         01 E0 85 95 92 C1 E1 FF FF 
+         01 E0 85 94 92 C1 E1 FF FF 
+         01 E0 85 93 92 C1 E1 FF FF 
+         01 E0 85 92 92 C1 E1 FF FF 
+         01 E0 85 91 92 C1 E1 FF FF 
+         01 E0 85 91 92 C1 E1 FF FF 
+         01 E0 85 94 92 C1 E1 FF FF  
+         01 E0 85 98 93 C1 E1 FF FF 
+         01 E0 85 A0 94 C1 E1 FF FF 
+         01 E0 85 A9 95 C1 E1 FF FF 
+         01 E0 85 B4 96 C1 E1 FF FF 
+         01 E0 85 BE 97 C1 E1 FF FF 
+         01 E0 85 C7 98 C1 E1 FF FF 
+         01 E0 85 CC 99 C1 E1 FF FF 
+         01 E0 85 CE 99 C1 E1 FF FF 
+         01 E0 85 CD 99 C1 E1 FF  
+ FF 01 E0 85 CB 99 C1 E1 FF FF 01 E0 85 C9 99 C1  
+ E1 FF FF 01 E0 C5 C7 98 C1 E1 FF FF 01 E0 C5 C5  
+ 98 C1 E1 FF FF 01 E0 85 C2 98 C1 E1 FF FF 01 E0  
+ 85 BF 97 C1 E1 FF FF 01 E0 85 BB 97 C1 E1 FF FF  
+ 01 E0 85 B8 97 C1 E1 FF FF 01 E0 85 B5 96 C1 E1  
+ FF FF 01 E0 85 B2 96 C1 E1 FF FF 01 E0 85 B0 96    
+ C1 E1 FF FF 01 E0 85 B0 96 C1 E1 FF FF 31 30 35
 
-class HWPoller(object):
-    """ thread to repeatedly poll hardware
-    sleeptime: time to sleep between pollfunc calls
-    pollfunc: function to repeatedly call to poll hardware"""
-  
-    def __init__(self, hwname, pollfunc, pollrate=0.02):
-        self.pollfunc = pollfunc  
-        self.hwname = hwname
-        self.pollrate = pollrate
-        self.thread = threading.Thread(target=self.worker)
-        #self.thread = TracebackLoggingThread(target=self.worker)
-        self._run_flag = threading.Event()
-        self._run_flag.set()
-        self.thread.daemon = True
-        self.thread.start()
-
-    def worker(self):
-        while(self._run_flag):
-            if True:
-                sys.stdout.flush()
-                try:
-                    self.pollfunc()
-                except Exception: # catch exception, 
-                    traceback.print_exc()
-                time.sleep(self.pollrate)
-            else:
-                time.sleep(self.pollrate)
-
-
-    def stop(self):
-        self._run_flag.clear()
-
-    def kill(self):
-        self.stop()
-        sys.stdout.flush()
-        #self.thread.join()
-
-class alicat(object):
-
-    def __init__(self, ser, cfg):
-        self.cfg = cfg
-        self.ser = ser
-        self.max_range_PSI = 5.0
-        self.verbose = False
-
-        self.sleeptime = self.cfg.getfloat('alicat','sleeptime')
-        self.flow = -1.0  # current flowure from thread
-        self.setpt = -1.0  # current setpoint from thread
-        self.interlock = False  # set to prohibit thread from accessing serial port
-        if self.ser.stdout is True:
-            return
-        self.Poller = HWPoller('alicat', 
-                               self.query_flowure_interlock,
-                               self.sleeptime)
-        #self.worker = GetFlowureWorker(self.sleeptime,
-        #        self.query_flowure_interlock)
-        #self.worker.resume()
-        #self.worker.start()
-
-
-    def init_alicat(self):
-        """Initialize flowure controller from config file,
-        return False if error"""
-
-        self.verbose = False
-
-      # OK, ready to start flowure thread
-
-        #print "started!"
-        self.interlock = False
-        sys.stdout.flush()
-        return True
-
-
-
-    def pollfunc(self):
-        #print "Hi!"
-        sys.stdout.flush()
-
-
-    def set_setpoint_int(self, setp_i):
-        # setpoint value is (setp_i/64000) * fullscale
-        cmd_str = 'A%d\r\n' % int(setp)
-        self.send_cmd(cmd_str)
-        
-        
-    def set_setpoint_float(self, setp_f):
-        cmd_str = 'AS%05.2f\r\n' % float(setp_f)
-        self.send_cmd(cmd_str)
-
-    def send_cmd(self, cmd_str):
-        """Set the flowure setpoint in PSI"""
-
-        if self.ser.stdout:
-            return
-        self.interlock = True
-        self.ser.ser.write(cmd_str)
-        self.ser.ser.flush()
-        time.sleep(0.1)
-        self.interlock = False
-
-    def TestConnected(self):
-        """ Return FALSE if there is an issue with the serial connection"""
-
-        if self.ser.stdout:
-            return True
-        if self.ser.ser == None:
-            return False
-        self.interlock = True
-        self.flow = 'test'
-        time.sleep(0.3)
-        self.query_flowure()
-        if self.flow == 'test':
-            return False
-        return True
-
-
-    def get_flow_mmHG(self):
-        return self.flow * 51.7
-
-    def get_flow(self):
-        """ return the last flowure reading, as a float,
-        -1 if there was an err"""
-        return self.flow
-
-    def query_flowure(self):
-        """queries, reads and parses flowure ctrl"""
-
-        if self.ser.stdout:
-            return
-        self.ser.checkwrite('A\r')
-        time.sleep(0.005)
-        response = self.ser.readline_n(34, tsleep=0.0)
-        #response = self.ser.checkread(33)
-        #print len(response)
-        
-
-        response = response.strip()
-        fields = response.split()
-
-    def set_p_reg(self, p_val):
-        """Set the proportional PID term on the Alicat controller"""
-        return self.set_register(21, int(p_val))
-
-    def set_d_reg(self, d_val):
-        """Set the derivative PID term on the Alicat controller"""
-        return self.set_register(22, int(d_val))
-
-    def set_register(self, reg, val):
-        """Set register 'reg' to value 'val' and confirm response"""
-        if self.ser.stdout:
-            return True
-
-        self.interlock = True
-        time.sleep(2 * self.sleeptime)
-        set_str = '*W%d=%d\r' % (int(reg), int(val))
-        self.ser.checkwrite(set_str)
-
-
-        # construct estimated response string (to get length)
-        # reponse string is of form "A   021 = 1000"
-
-
-
-        response_str = self.ser.readline_n(20)
-
-        # check response is what we wrote
-        #est_response = 'A   %03d = %d\r' % (int(reg), int(val))
-        response = response_str.split()
-
-        if len(response) < 4:
-            print("alicat: error parsing register set response")
-            return False
-        
-        #print 'got response: ' + repr(response_str)
-
-        return True
-
-
+"""
 preamble = "7D 81 A2 80 80 80 80 80 80 \
             7D 81 A7 80 80 80 80 80 80 \
             7D 81 A8 80 80 80 80 80 80 \
             7D 81 A9 80 80 80 80 80 80 \
             7D 81 AA 80 80 80 80 80 80 \
             7D 81 B0 80 80 80 80 80 80"
+
+# starts streaming E1 data (pulse)
+
+cmd1 = "7D 81 A1 80 80 80 80 80 80"
+
+# sent periodically -- to get spo2? E2 data?
+cmd1 = "7D 81 A1 80 80 80 80 80 80"
+cmd2 = "7d 81 af 80 80 80 80 80 80"
 
 pre2 =     "7D 81 A7 80 80 80 80 80 80  0C 80 \
             7D 81 A2 80 80 80 80 80 80  0C 80 \
@@ -209,37 +103,64 @@ usage = 'Command line usage: \
 "sp" f -- set flow point to float f \
 "si" i -- set flow point to integer 0 < i < 100'
 
+
+def chartx(x, clen=20):
+    # generate a string which is a bargraph of floating point x
+    if x > 1.:
+        x = 1.
+    slen = int(x*clen)
+    cstr = ['%' for s in range(slen)]
+    return "".join(cstr)
+
 if __name__ == '__main__':
     
     portname = "/dev/ttyUSB0"
     portbaud = 115200
-    ser = serial_io.SerialIO(portname, portbaud, timeout=0.0)
+    ser = serial.Serial(portname, portbaud, timeout=0.0)
     print('opened port ' + portname + ' at ' + str(portbaud) 
           + ' baud for device')
     sys.stdout.flush()
 
 
-    pre_bytes = [int(s,16) for s in pre2.split()]
-    print(pre_bytes)
+    cmd1 = [int(s,16) for s in cmd1.split()]
+    cmd2 = [int(s,16) for s in cmd2.split()]
+    #print(pre_bytes)
     
-    sendstr = bytes(pre_bytes)
-    
-    for b in sendstr:
-        
-        ser.ser.write(pre_bytes[0:8])
-        time.sleep(0.05)
-        if ser.ser.in_waiting > 0:
-            inbyte = ser.ser.read(1)
-            print("got" + str(inbyte))
-
-
-
-    time.sleep(0.5)
+    ser.write(cmd1)
+    ser.write(cmd2)
+    time.sleep(0.05)
+        #if ser.in_waiting > 0:
+        #    inbyte = ser.read(1)
+        #    print("got" + str(inbyte))
+    count = 0
     while True:
-        if ser.ser.in_waiting > 0:
-            inbyte = ser.ser.read(1)
-            print("got %x" % int(inbyte))
-        time.sleep(0.001)
+        if ser.in_waiting >= 9:
+            count += 1
+            inbytes = ser.read(9)
+            if inbytes[0] == 0x01 and inbytes[1] == 0xe0:
+                print("got E1 " + str(inbytes))
+                #streaming pulse data
+                print("pulse: {}".format(int(inbytes[5] & 0x7f)))
+                print("spO: {}".format(int(inbytes[6] & 0x7f)))
+                #print("SpO2: {} ".format(int(inbytes[4])))
+                #print(chartx((inbytes[4] - 146)/8.)) 
+            elif inbytes[0] == 0x01 and inbytes[1] == 0xe2:
+                print("got E2 " + str(inbytes))
+                sys.stdout.flush()
+            elif inbytes[0] == 0x01 and inbytes[1] == 0xe1:
+                # not connected
+                print("E2 no data")
+               
+            else:
+                print("got " + str(inbytes))
+            time.sleep(0.0001)
+            
+            if count > 100:
+                count = 0
+                print("sent cms2")
+                ser.write(cmd2)
+                sys.stdout.flush()
+
 
            
     exit()

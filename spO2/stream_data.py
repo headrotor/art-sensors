@@ -8,7 +8,7 @@
 ### WARNING: UNFIT FOR ANY MEDICAL USE INCLUDING BUT NOT LIMITED TO DIAGNOSIS AND MONITORING
 ### NO WARRANTY EXPRESS OR IMPLIED, UNDOCUMENTED SERIAL INTERFACE: USE AT OWN RISK
 
-# comminication is vial the USB-serial converter at 115200 baud, 8 bits, no parity or handshake.
+# communication is over the USB-serial converter at 115200 baud, 8 bits, no parity or handshake.
 # Serial protocol seems to be mostly 9-byte packets.
 
 # Commands are all 9 bytes starting with  0x7D 0x81. 
@@ -20,6 +20,10 @@
 import serial
 import sys
 import time
+
+# None to not log
+logfn = "contec.log"
+
 
 """
          Captured data from serial port: on each line first 9 bytes are sent, remaining bytes are response
@@ -42,9 +46,9 @@ import time
                                      01 E0 85 AA 95 C1 E1 FF FF 
 
          This is streaming data, first byte is 0x01, second is 0xEn where n indicates data validity: 
-                                 0xE0 no valid data
-                                 0xE1 real-time  data is valid
-                                 0xE2 real-time, pulse, and spO2 values are valid (takes a few seconds, not shown in trace above)
+                                 0xE0 valid real-time and pulse data (takes a few seconds, not shown in trace above)
+                                 0xE1 real-time  data is valid, pulse and spo2 not valid
+                                 0xE2 no valid data 
                                  next two bytes are real-time pulse data (for graph) (with high bit set?)
                                  (unsure why two different values, but may echo bar graph and plot on device OLED.
                                  next two bytes are pulse in BPM, and spO2 percent (high bit is set so AND with 0x7F to get integer values)
@@ -68,6 +72,9 @@ def chartx(x, clen=20, c='#'):
     return "".join(cstr)
 
 if __name__ == '__main__':
+
+
+
     
     portname = "/dev/ttyUSB0"
     portbaud = 115200
@@ -76,7 +83,10 @@ if __name__ == '__main__':
           + ' baud for device')
     sys.stdout.flush()
 
+    if logfn is not None:
+        logfile = open(logfn, 'w')
 
+    # convert ascii hex to bytes
     cmd1 = [int(s,16) for s in cmd1.split()]
     cmd2 = [int(s,16) for s in cmd2.split()]
     #print(pre_bytes)
@@ -92,20 +102,21 @@ if __name__ == '__main__':
         if ser.in_waiting >= 9:
             count += 1
             inbytes = ser.read(9)
-            if inbytes[0] == 0x01 and inbytes[1] == 0xe0:
-                print("got E1 " + str(inbytes))
-                #streaming pulse data
-                print("pulse: {}".format(int(inbytes[5] & 0x7f)))
-                print("spO: {}".format(int(inbytes[6] & 0x7f)))
-                #print("SpO2: {} ".format(int(inbytes[4])))
-                #print(chartx((inbytes[4] - 146)/8.)) 
-            elif inbytes[0] == 0x01 and inbytes[1] == 0xe2:
-                print("got E2 " + str(inbytes))
-                sys.stdout.flush()
-            elif inbytes[0] == 0x01 and inbytes[1] == 0xe1:
-                # not connected
-                print("E2 no data")
-               
+            if inbytes[0] == 0x01: 
+                print("got " + str(inbytes))
+                if inbytes[1] == 0xE0:
+                    # valid streaming data
+                    #streaming pulse data
+                    print("pulse: {}".format(int(inbytes[5] & 0x7f)))
+
+                    print("spO: {}".format(int(inbytes[6] & 0x7f)))
+                    #print("SpO2: {} ".format(int(inbytes[4])))
+                    #print(chartx((inbytes[4] - 146)/8.)) 
+                    print([inbytes[n] & 0x7F for n in [3,4,5,6]])
+                    logfile.write("{},".format(time.time()))
+                    logfile.write("{},{},{},{},{}\n".format(*[inbytes[n] & 0x7F for n in [2,3,4,5,6]]))
+                else:
+                    sys.stderr.write("Waiting for valid data\n")
             else:
                 print("got " + str(inbytes))
             time.sleep(0.0001)

@@ -87,7 +87,7 @@ def BreathingApp():
         # PrintBreathingEnergy(energy)
         #display_breath(10e7 * energy)
         bpos += energy * 10e3 * 8.
-        bpos = bpos * 0.993
+        bpos = bpos * 0.995
         pos = int(bpos * 300)
         if pos > 1000:
             pos = 1000
@@ -97,6 +97,7 @@ def BreathingApp():
         ser.write('\n')
         print(chartx((pos + 1000)/2000.))
         print(pos)
+        time.sleep(0.02)
         #print('{}'.format(bpos))
         #PrintBreathingEnergy(energy)
     # 7) Stop and Disconnect.

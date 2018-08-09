@@ -13,6 +13,19 @@ elif platform.startswith('linux'):
     modulePath = os.path.join('/usr', 'share', 'walabot', 'python', 'WalabotAPI.py')
 
 
+# these are stepper steps so depends on driver settings
+# zero should be limit switch
+
+low_limit = 0
+high_limit = 2000
+# kind of the center point, return here at zero signal
+offset = 1000
+
+# arbitrary numbers here, between 1 and 20?
+gain = 8
+
+# first order highpass coefficient to remove dc offset
+hipass = 0.98
 
 ser = serial.Serial('COM6', 115200, timeout=0)
 
@@ -21,8 +34,15 @@ wlbt = load_source('WalabotAPI', modulePath)
 wlbt.Init()
 
 
-
-
+# def energy_to_steps(e):
+#     bpos += energy * 10e3 * 8.
+#     bpos = bpos * 0.995
+#     pos = int(bpos * 300)
+#     if pos > 1000:
+#         pos = 1000
+#     if pos < -1000:
+#         pos = -1000;
+    
 def chartx(x, clen=70, c='#'):
     """generate a string of max length clen which is a bargraph of 
     floating point value 0. <= x <= 1 consisting of character c """
@@ -77,6 +97,7 @@ def BreathingApp():
     wlbt.Start()
     # 4) Trigger: Scan (sense) according to profile and record signals to be
     # available for processing and retrieval.
+    bpos = 0.
     while True:
         appStatus, calibrationProcess = wlbt.GetStatus()
         # 5) Trigger: Scan(sense) according to profile and record signals
@@ -84,18 +105,20 @@ def BreathingApp():
         wlbt.Trigger()
         # 6) Get action: retrieve the last completed triggered recording
         energy = wlbt.GetImageEnergy()
+
+        #pos = energy_to_steps(energy)
         # PrintBreathingEnergy(energy)
         #display_breath(10e7 * energy)
-        bpos += energy * 10e3 * 8.
-        bpos = bpos * 0.995
-        pos = int(bpos * 300)
-        if pos > 1000:
-            pos = 1000
-        if pos < -1000:
-           pos = -1000;
+        bpos += energy * 10e3 * 4.
+        bpos = bpos * hipass
+        pos = int(bpos * 300) + offset
+        if pos > high_limit:
+            pos = high_limit
+        if pos < low_limit:
+           pos = low_limit;
         ser.write(str(pos))
         ser.write('\n')
-        print(chartx((pos + 1000)/2000.))
+        print(chartx(float(pos - low_limit)/float(high_limit - low_limit)))
         print(pos)
         time.sleep(0.02)
         #print('{}'.format(bpos))

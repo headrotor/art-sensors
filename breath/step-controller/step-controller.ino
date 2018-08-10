@@ -22,17 +22,21 @@ char readstr[32];
 int strptr = 0;
 int newpos = 0;
 int oldpos = 0;
+int pos = 0;
 
-int max_speed = 160000;
-int hunt_speed = 1000;
+int max_speed = 320000;
+
+int max_accel = 3000000;
+int hunt_speed = 4000;
+int neutral = 750; // neutal offset from zero
 
 #define LIMIT_SW 23
 Bounce limit = Bounce(LIMIT_SW, 20);
 
-
+int slew = 1;
 
 void setup() {
-
+  
   // setup limit switch with pullup
   pinMode(LIMIT_SW, INPUT_PULLUP);
 
@@ -42,11 +46,11 @@ void setup() {
   newpos = 0;
   // on power up, find limit switch
   motor.setMaxSpeed(hunt_speed);         // stp/s
-  motor.setAcceleration(10000);    // stp/s^2
+  motor.setAcceleration(100000);    // stp/s^2
   limit.update();
   while (limit.fallingEdge() == 0 ) {
     limit.update();
-    newpos = newpos + 2;
+    newpos = newpos + 4;
     motor.setTargetAbs(newpos);
     controller.move(motor);
     Serial.print("Searching for limit at ");
@@ -56,16 +60,18 @@ void setup() {
   // OK, found the limit switch, set this as zero
   newpos = 0;
   oldpos = 0;
+  pos = 0;
   motor.setPosition(newpos);
   // back off a few degrees?
 
-  newpos = 1000;
-  motor.setTargetAbs(hunt_speed);
+  newpos = neutral;
+  oldpos = neutral;
+  motor.setTargetAbs(newpos);
   controller.move(motor);
 
   motor.setMaxSpeed(max_speed);         // stp/s
   //motor.setPullInSpeed(max_speed + 1);         // stp/s
-  motor.setAcceleration(100000);    // stp/s^2
+  motor.setAcceleration(max_accel);    // stp/s^2
 
 }
 
@@ -95,17 +101,26 @@ void loop() {
   // map it to the range of the analog out:
   //outputValue = map(sensorValue, 0, 1023, min_speed, max_speed);
   //motor.setMaxSpeed(outputValue);
-  if (newpos != oldpos) {
-    motor.setTargetAbs(newpos);  // Set target position to 1000 steps from current position
+
+  /*
+    while (newpos != pos || 0) {
+      if (pos > newpos) {
+        pos -= slew;
+      }
+      else if (pos < newpos) {
+        pos += slew;
+      }
+      motor.setTargetAbs(newpos);  // Set target position to 1000 steps from current position
+      controller.move(motor);
+    }
+  */
+
+  if ( newpos != oldpos) {
+    motor.setTargetAbs(newpos);  // new target position
     controller.move(motor);
     oldpos = newpos;
   }
-  if (!controller.isRunning() &&  0) {
-    motor.setMaxSpeed(max_speed);         // stp/s
 
-    //controller.moveAsync(motor);
-    Serial.println(newpos);
-  }
   //Serial.print(outputValue);
   //Serial.print("\n");
   //Serial.println(outputValue);

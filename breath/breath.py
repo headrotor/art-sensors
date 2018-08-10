@@ -19,13 +19,13 @@ elif platform.startswith('linux'):
 low_limit = 0
 high_limit = 2000
 # kind of the center point, return here at zero signal
-offset = 1000
+offset = 750
 
 # arbitrary numbers here, between 1 and 20?
-gain = 8
+gain = 20.
 
 # first order highpass coefficient to remove dc offset
-hipass = 0.98
+hipass = 0.985
 
 ser = serial.Serial('COM6', 115200, timeout=0)
 
@@ -105,22 +105,32 @@ def BreathingApp():
         wlbt.Trigger()
         # 6) Get action: retrieve the last completed triggered recording
         energy = wlbt.GetImageEnergy()
-
+        #energy seems to be some kind of differential signal.
+        # positive on inhale (motion away from sensor), negative on exhale.
         #pos = energy_to_steps(energy)
-        # PrintBreathingEnergy(energy)
-        #display_breath(10e7 * energy)
-        bpos += energy * 10e3 * 4.
+        # integrate energy to get position
+        bpos += float(energy) * 10e3 * gain
+        # high pass to remove DC and return to zero if no signal
         bpos = bpos * hipass
-        pos = int(bpos * 300) + offset
+        # add offset and scale to get stepper step position
+        pos = int(bpos * 300.) + offset
+        # clamp to min and max limits
         if pos > high_limit:
             pos = high_limit
         if pos < low_limit:
            pos = low_limit;
+
+        # send the position data to the stepper controller over the serial port
         ser.write(str(pos))
         ser.write('\n')
-        print(chartx(float(pos - low_limit)/float(high_limit - low_limit)))
-        print(pos)
-        time.sleep(0.02)
+
+        # display a bargraph
+        #print("{0:6.2f} ".format(bpos))
+        print("{0:6.2f} ".format(bpos) + chartx(float(pos - low_limit)/float(high_limit - low_limit)))
+        sys.stdout.flush()
+
+        # don't send data faster than the thing can handle
+        time.sleep(0.01)
         #print('{}'.format(bpos))
         #PrintBreathingEnergy(energy)
     # 7) Stop and Disconnect.

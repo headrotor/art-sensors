@@ -17,12 +17,12 @@ elif platform.startswith('linux'):
 # zero should be limit switch
 
 low_limit = 0
-high_limit = 2000
+high_limit = 1600
 # kind of the center point, return here at zero signal
-offset = 750
+offset = high_limit/3
 
 # arbitrary numbers here, between 1 and 20?
-gain = 20.
+gain = 15.
 
 # first order highpass coefficient to remove dc offset
 hipass = 0.985
@@ -130,7 +130,7 @@ def BreathingApp():
         sys.stdout.flush()
 
         # don't send data faster than the thing can handle
-        time.sleep(0.01)
+        time.sleep(0.001)
         #print('{}'.format(bpos))
         #PrintBreathingEnergy(energy)
     # 7) Stop and Disconnect.

@@ -21,7 +21,7 @@
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800);
 
-byte neopix_gamma[] = {
+byte gmap[] = {
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
   1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
@@ -56,6 +56,19 @@ StepControl<> controller;    // Use default settings
 #include <Bounce.h>
 
 
+// State machine for inhale/exhale
+
+#define INHALE 0
+#define INHALE_PAUSE 1
+#define EXHALE 2
+#define EXHALE_PAUSE 3
+
+int m_state = EXHALE_PAUSE;
+
+
+
+
+
 char readstr[32];
 int strptr = 0;
 int newpos = 0;
@@ -76,6 +89,7 @@ float phase = 3 * PI / 2;
 #define RUN_SW 22
 #define UP_BUTTON 21
 #define DN_BUTTON 20
+#define SMOKE_ALARM 14
 
 Bounce limit = Bounce(LIMIT_SW, 20);
 Bounce run_sw = Bounce(RUN_SW, 20);
@@ -92,11 +106,12 @@ void setup() {
   pinMode(RUN_SW, INPUT_PULLUP);
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DN_BUTTON, INPUT_PULLUP);
+  pinMode(SMOKE_ALARM, INPUT);
 
   // initialize serial communications at 9600 bps:
   Serial.begin(115200);
 
-  strip.setBrightness(BRIGHTNESS);
+  strip.setBrightness(255);
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
 
@@ -105,7 +120,7 @@ void setup() {
   motor.setMaxSpeed(hunt_speed);         // stp/s
   motor.setAcceleration(1000000);    // stp/s^2
   limit.update();
-  while (limit.fallingEdge() == 0 ) {
+  while ((limit.fallingEdge() == 0) || (limit.read() == HIGH)  ) {
     limit.update();
     newpos = newpos + 20;
     motor.setTargetAbs(newpos);
@@ -139,8 +154,94 @@ void setup() {
   motor.setAcceleration(max_accel);    // stp/s^2
 }
 
+elapsedMillis time_in_state;
+float smoke_value = 0.0;
+
+void update_state() {
+
+  switch (m_state) {
+    case INHALE:
+      if (! controller.isRunning()) {
+        // we've reached the end of the breath, change state
+        Serial.println("in pause");
+        m_state = INHALE_PAUSE;
+        time_in_state = 0;
+      }
+      break;
+
+    case INHALE_PAUSE:
+      if (time_in_state > 200) {
+        Serial.println("exhale");
+        m_state = EXHALE;
+        motor.setTargetAbs(MAX_TICKS);
+        controller.moveAsync(motor);
+        delay(10);
+      }
+      break;
+
+
+    case EXHALE:
+      if (! controller.isRunning()) {
+        // we've reached the end of the breath, change state
+        Serial.println("exhale pause");
+        m_state = EXHALE_PAUSE;
+        time_in_state = 0;
+      }
+      break;
+
+    case EXHALE_PAUSE:
+      //Serial.println(time_in_state);
+      if (time_in_state > 100) {
+        Serial.println("inhale");
+        m_state = INHALE;
+        motor.setTargetAbs(MIN_TICKS);
+        controller.moveAsync(motor);
+        delay(10);
+      }
+      break;
+  }
+  //Serial.print("Current state is ");
+  //Serial.println(m_state);
+}
+
 
 void loop() {
+  motor.setMaxSpeed(800 + 300 * r_speed);       // stp/s
+  motor.setAcceleration(2000);         // stp/s
+
+  run_sw.update();
+  up_button.update();
+  dn_button.update();
+
+
+  if (digitalRead(SMOKE_ALARM) == HIGH) {
+    smoke_value = 1.0;
+  }
+  else {
+    // fade red to black slowly
+    smoke_value =  0.9999 * smoke_value;
+  }
+
+  if (run_sw.read()) {
+    update_state();
+    bargraph_1(int(motor_pos() * float(strip.numPixels())));
+    //bargraph_2(int(motor_pos() * float(strip.numPixels())));
+  }
+
+}
+
+float motor_pos(void) {
+  /// return motor position as a float between 0 and 1.
+  int pos = motor.getPosition();
+  int ext = MAX_TICKS - MIN_TICKS;
+  return ( float(pos - MIN_TICKS) / float(ext) );
+
+
+
+}
+
+
+void oldloop() {
   //delay(3);  //delay to allow buffer to fill
   if (Serial.available() > 0) {
     char c = Serial.read();  //gets one byte from serial buffer
@@ -266,7 +367,7 @@ void loop() {
 
 void show_white(uint8_t val) {
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
-    strip.setPixelColor(i, strip.Color(0, 0, 0, neopix_gamma[val] ) );
+    strip.setPixelColor(i, strip.Color(0, 0, 0, gmap[val] ) );
   }
   strip.show();
 }
@@ -276,7 +377,7 @@ void show_one(uint8_t it) {
   }
   //it = it & 0x0F;
   //if (it < strip.numPixels()) {
-  strip.setPixelColor(it % strip.numPixels(), strip.Color(0, 0, 0, neopix_gamma[128] ) );
+  strip.setPixelColor(it % strip.numPixels(), strip.Color(0, 0, 0, gmap[128] ) );
   //}
   strip.show();
 }
@@ -289,11 +390,12 @@ void show_all(uint8_t r, uint8_t g, uint8_t b ) {
 }
 
 void bargraph_1(uint8_t val ) {
+  int red_val = (int) (255.0*smoke_value);
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     if (i < val) {
-      strip.setPixelColor(i, strip.Color(0, 0, 0, neopix_gamma[128] ) );
+      strip.setPixelColor(i, strip.Color(gmap[red_val], 0, 0, gmap[128] ) );
     } else {
-      strip.setPixelColor(i, strip.Color(0, 0, 0, 0) );
+      strip.setPixelColor(i, strip.Color(gmap[red_val], 0, 0, 0) );
     }
   }
   strip.show();

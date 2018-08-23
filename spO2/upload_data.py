@@ -146,7 +146,7 @@ if __name__ == '__main__':
         if ser.in_waiting >= 8:
             count += 1
             inbytes = ser.read(8)
-            print("got " + str(inbytes))
+            #print("got " + str(inbytes))
             if inbytes[0] == 0x0f: 
                 print("{}, {}".format(int(inbytes[2] & 0x7f), int(inbytes[3] & 0x7f)))
                 print("{}, {}".format(int(inbytes[4] & 0x7f), int(inbytes[5] & 0x7f)))
@@ -156,11 +156,11 @@ if __name__ == '__main__':
                 #logfile.write("{},{},{},{},{}\n".format(*[inbytes[n] & 0x7F for n in [2,3,4,5,6]]))
             else:
                 print("got " + str(inbytes))
-            time.sleep(0.0001)
+            #time.sleep(0.0001)
             
             if count > 100:
                 count = 0
-                print("sent cms2")
+                #print("sent cms2")
                 ser.write(cmd2)
                 sys.stdout.flush()
 

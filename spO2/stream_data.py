@@ -15,7 +15,19 @@
 # The third byte seems to be some kind of opcode. 
 # Remaining bytes are padded with 0x80 although there may be data in a command I have not captured. 
 # In the response, the high bit is set on all but the first byte. 
-# Most responses are 
+
+
+# the microusb connector is NOT USB it is serial! 
+# Pinout (flat side up, looking INTO device female jack)
+
+# _____________
+# | 1 2 3 4 5 |   
+# \._________./
+#  
+# Pin 2: device RX (Host TX) (white?)
+# Pin 3: device TX (Host RX) (green?)
+# Pin 5: GND                 (black)
+# other pins: NC?
 
 import serial
 import sys

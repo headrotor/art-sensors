@@ -88,7 +88,8 @@ if __name__ == '__main__':
 
 
     
-    portname = "/dev/ttyUSB0"
+    #portname = "/dev/ttyUSB0"
+    portname = "COM7"
     portbaud = 115200
     ser = serial.Serial(portname, portbaud, timeout=0.0)
     print('opened port ' + portname + ' at ' + str(portbaud) 
@@ -115,16 +116,18 @@ if __name__ == '__main__':
             count += 1
             inbytes = ser.read(9)
             if inbytes[0] == 0x01: 
-                print("got " + str(inbytes))
+                #print("got " + str(inbytes))
                 if inbytes[1] == 0xE0:
                     # valid streaming data
                     #streaming pulse data
-                    print("pulse: {}".format(int(inbytes[5] & 0x7f)))
+                    #print("pulse: {}".format(int(inbytes[5] & 0x7f)))
+                    #print("heart: {}".format(int(inbytes[3] & 0x7f)))
 
-                    print("spO: {}".format(int(inbytes[6] & 0x7f)))
+                    #print("spO: {}".format(int(inbytes[6] & 0x7f)))
                     #print("SpO2: {} ".format(int(inbytes[4])))
-                    #print(chartx((inbytes[4] - 146)/8.)) 
-                    print([inbytes[n] & 0x7F for n in [3,4,5,6]])
+                    print(chartx((inbytes[3] & 0x7F)/100.,80)) 
+                    #print([inbytes[n] & 0x7F for n in [3,4,5,6]])
+                    sys.stdout.flush()
                     logfile.write("{},".format(time.time()))
                     logfile.write("{},{},{},{},{}\n".format(*[inbytes[n] & 0x7F for n in [2,3,4,5,6]]))
                 else:
@@ -135,7 +138,7 @@ if __name__ == '__main__':
             
             if count > 100:
                 count = 0
-                print("sent cms2")
+                #print("sent cms2")
                 ser.write(cmd2)
                 sys.stdout.flush()
 

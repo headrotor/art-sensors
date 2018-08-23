@@ -115,6 +115,7 @@ def chartx(x, clen=20):
 if __name__ == '__main__':
     
     portname = "/dev/ttyUSB0"
+    portname = "COM7"
     portbaud = 115200
     ser = serial.Serial(portname, portbaud, timeout=0.0)
     print('opened port ' + portname + ' at ' + str(portbaud) 

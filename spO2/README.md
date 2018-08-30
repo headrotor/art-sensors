@@ -48,8 +48,9 @@ have not captured. Again the high bit is set in all bytes except the
 first. While there seem to be a number of control packets, the only
 two which seem necessary are
 
-`D 81 A1 80 80 80 80 80 80` (to start streaming) and `` (to start downloading realtime data).
+`7D 81 A1 80 80 80 80 80 80` (to start streaming) and `7D 81 A6 80 80 80 80 80 80` (to start downloading realtime data).
 
 The device sends other data back, but data packets are documented in
 more detail in the python code, along with sample responses.
 
+am

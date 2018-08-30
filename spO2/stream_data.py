@@ -74,46 +74,46 @@ cmd1 = "7D 81 A1 80 80 80 80 80 80"
 # sent periodically by host --  Keep-alive? May not need this. 
 cmd2 = "7d 81 af 80 80 80 80 80 80"
 
-def chartx(x, clen=20, c='#'):
-    """generate a string of max length clen which is a bargraph of 
-    floating point value 0. <= x <= 1 consisting of character c """
-    if x > 1.:
-        x = 1.
-    slen = int(x*clen)
-    cstr = [c for s in range(slen)]
-    return "".join(cstr)
-
 if __name__ == '__main__':
 
-
-
-    
-    #portname = "/dev/ttyUSB0"
-    portname = "COM7"
+    portname = "/dev/ttyUSB0"
+    #portname = "COM7"
     portbaud = 115200
+    try:
+        ser = serial.Serial(portname, portbaud, timeout=2.0)
+    except:
+        print('Error opening device at ' + portname)
+        print('Edit file to reflect serial port of device')
+        raise
     ser = serial.Serial(portname, portbaud, timeout=0.0)
-    print('opened port ' + portname + ' at ' + str(portbaud) 
-          + ' baud for device')
-    sys.stdout.flush()
+    sys.stderr.write('opened port {}\n'.format(portname))
 
-    if logfn is not None:
+    if len(sys.argv) > 1:
+        logfn = sys.argv[1]
         logfile = open(logfn, 'w')
+        sys.stderr.write("Writing data to file ()\n".format(logfn))
+    else:
+        logfn = "stdout"
+        logfile = sys.stdout
 
     # convert ascii hex to bytes
     cmd1 = [int(s,16) for s in cmd1.split()]
     cmd2 = [int(s,16) for s in cmd2.split()]
     #print(pre_bytes)
     
-    ser.write(cmd1)
+    ser.write(cmd1) # this command starts dumping downloaded data
+    # there;s probably a command that tells how much data is available but
+    # I don't know what it is. Just stream data until it stops. 
+
     ser.write(cmd2)
     time.sleep(0.05)
-        #if ser.in_waiting > 0:
-        #    inbyte = ser.read(1)
-        #    print("got" + str(inbyte))
-    count = 0
-    while True:
+
+    packet_count = 0
+    wait_count = 0
+    keep_going = True
+    while keep_going:  # stream data until it stops
         if ser.in_waiting >= 9:
-            count += 1
+            packet_count += 1
             inbytes = ser.read(9)
             if inbytes[0] == 0x01: 
                 #print("got " + str(inbytes))
@@ -136,12 +136,18 @@ if __name__ == '__main__':
                 print("got " + str(inbytes))
             time.sleep(0.0001)
             
-            if count > 100:
-                count = 0
+            if packet_count % 100 == 0:
                 #print("sent cms2")
                 ser.write(cmd2)
-                sys.stdout.flush()
-
-
-           
-    exit()
+                sys.stderr.write("wrote {} packets to {}\n".format((count,logfn)))
+                sys.stderr.flush()
+                
+        else: # waiting for serial data, if there is no more than we are done.
+            wait_count += 1
+            if wait_count > 300:
+                sys.stderr.write("Timeout -- no more data?\n")
+                keep_going = False
+                break
+            time.sleep(0.01)
+    sys.stderr.write("Finished.\n")
+    exit(0)

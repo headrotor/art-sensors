@@ -101,34 +101,25 @@ logfn = "contec.log"
 cmd1 = "7D 81 A1 80 80 80 80 80 80"
 
 # starts downloading stored data
-cmd1 = "7d 81 a6 80 80 80 80 80 80"
+cmd1 = "7D 81 A6 80 80 80 80 80 80"
 
 # sent periodically by host --  Keep-alive? May not need this. 
 cmd2 = "7d 81 af 80 80 80 80 80 80"
 
-def chartx(x, clen=20, c='#'):
-    """generate a string of max length clen which is a bargraph of 
-    floating point value 0. <= x <= 1 consisting of character c """
-    if x > 1.:
-        x = 1.
-    slen = int(x*clen)
-    cstr = [c for s in range(slen)]
-    return "".join(cstr)
-
 if __name__ == '__main__':
 
-
-
-    
     portname = "/dev/ttyUSB0"
     portbaud = 115200
-    ser = serial.Serial(portname, portbaud, timeout=0.0)
+
+    try:
+        ser = serial.Serial(portname, portbaud, timeout=2.0)
+    except:
+        print('Error opening device at ' + portname)
+        print('Edit file to reflect serial port of device')
+        raise
     print('opened port ' + portname + ' at ' + str(portbaud) 
           + ' baud for device')
     sys.stdout.flush()
-
-    if logfn is not None:
-        logfile = open(logfn, 'w')
 
     # convert ascii hex to bytes
     cmd1 = [int(s,16) for s in cmd1.split()]
@@ -142,6 +133,7 @@ if __name__ == '__main__':
         #    inbyte = ser.read(1)
         #    print("got" + str(inbyte))
     count = 0
+    print("{}, {}".format(int(inbytes[2] & 0x7f), int(inbytes[3] & 0x7f)))
     while True:
         if ser.in_waiting >= 8:
             count += 1
@@ -152,18 +144,10 @@ if __name__ == '__main__':
                 print("{}, {}".format(int(inbytes[4] & 0x7f), int(inbytes[5] & 0x7f)))
                 print("{}, {}".format(int(inbytes[6] & 0x7f), int(inbytes[7] & 0x7f)))
 
-                #logfile.write("{},".format(time.time()))
-                #logfile.write("{},{},{},{},{}\n".format(*[inbytes[n] & 0x7F for n in [2,3,4,5,6]]))
-            else:
-                print("got " + str(inbytes))
-            #time.sleep(0.0001)
-            
             if count > 100:
                 count = 0
                 #print("sent cms2")
                 ser.write(cmd2)
                 sys.stdout.flush()
-
-
            
     exit()

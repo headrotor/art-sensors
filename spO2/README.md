@@ -1,4 +1,4 @@
-# Python files to obtain data from CONTEC CMS50D+ Pulse Oximeter
+## Python files to obtain data from CONTEC CMS50D+ Pulse Oximeter
 
 WORK PRESENTED HERE IS FOR EDUCATIONAL PURPOSES ONLY AND IS UNFIT FOR
 ANY HEALTH OR MEDICAL USE INCLUDING BUT NOT LIMITED TO DIAGNOSIS AND
@@ -15,7 +15,7 @@ Which meant it was relatively straightforward to reverse-engineer the
 undocumented serial protocol to get the data from the device.
 
 First of all, it communicates at 15200 baud with the following pinout:
-`
+```
 # Micro-B pinout (flat side up, looking INTO device female jack)
 #
 # _____________
@@ -26,7 +26,7 @@ First of all, it communicates at 15200 baud with the following pinout:
 # Pin 3: device TX (Host RX) (USB green?)
 # Pin 5: GND                 (USB black)
 # other pins: NC?
-`
+```
 
 Or you can just use the cable that came with it, noting the serial port (COMn on Windows or /dev/ttyUSBn on Linux) that it comes up as.  
 

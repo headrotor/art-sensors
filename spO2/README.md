@@ -52,5 +52,3 @@ two which seem necessary are
 
 The device sends other data back, but data packets are documented in
 more detail in the python code, along with sample responses.
-
-am

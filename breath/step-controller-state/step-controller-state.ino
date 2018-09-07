@@ -13,13 +13,23 @@
 #include <avr/power.h>
 #endif
 
-#define PIN 6
+#define NEO_PIN 6
+
+#ifdef BIGRING
 
 #define NUM_LEDS 24
-
 #define BRIGHTNESS 50
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRBW + NEO_KHZ800);
+
+#else
+
+#define NUM_LEDS 12
+#define BRIGHTNESS 50
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_RGB + NEO_KHZ800);
+
+#endif
+
 
 byte gmap[] = {
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -224,8 +234,9 @@ void loop() {
 
   if (run_sw.read()) {
     update_state();
-    bargraph_1(int(motor_pos() * float(strip.numPixels())));
-    //bargraph_2(int(motor_pos() * float(strip.numPixels())));
+    //bargraph_1(int(motor_pos() * float(strip.numPixels())));
+    //breathe_led(int(motor_pos() * float(strip.numPixels())));
+    breathe_led_float(motor_pos());
   }
 
 }
@@ -377,7 +388,7 @@ void show_one(uint8_t it) {
   }
   //it = it & 0x0F;
   //if (it < strip.numPixels()) {
-  strip.setPixelColor(it % strip.numPixels(), strip.Color(0, 0, 0, gmap[128] ) );
+  strip.setPixelColor(it % strip.numPixels(), strip.Color(gmap[128], gmap[128], gmap[128] ) );
   //}
   strip.show();
 }
@@ -389,8 +400,48 @@ void show_all(uint8_t r, uint8_t g, uint8_t b ) {
   strip.show();
 }
 
+
+void breathe_led(uint8_t val) {
+  // simulate breathing by lighting up progressive brightness and number of leds
+  // 0 <= val < num_pixles
+  int bright = gmap[100 + 10 * val];
+  int red_val = gmap[int(255.0 * smoke_value)];
+  for (uint16_t i = 0; i < strip.numPixels(); i++) {
+    if (  (i < val) || (i >= (strip.numPixels() - val))) {
+      strip.setPixelColor(i, strip.Color(bright, bright, bright ) );
+    } else {
+      strip.setPixelColor(i, strip.Color(red_val, 0, 0) );
+    }
+  }
+  strip.show();
+
+}
+
+void breathe_led_float(float val) {
+  val = 1.0 - val;
+  // 0 <= val < 1.0
+  // simulate breathing by lighting up progressive brightness and number of leds
+  int red_val = gmap[int(255.0*smoke_value)];
+
+  // light up a fraction of the brightness
+  int bright = gmap[int(255 * val)];
+  int bar = int(strip.numPixels() * val);
+  for (uint16_t i = 0; i < strip.numPixels(); i++) {
+    if (  (i < bar) || (i >= (strip.numPixels() - bar))) {
+      strip.setPixelColor(i, strip.Color(bright, bright, bright ) );
+    }
+    else {
+      strip.setPixelColor(i, strip.Color(0,red_val,0 ) );
+    }
+  }  // light up some fraction of the leds to full
+
+  strip.show();
+
+}
+
+
 void bargraph_1(uint8_t val ) {
-  int red_val = (int) (255.0*smoke_value);
+  int red_val = (int) (255.0 * smoke_value);
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     if (i < val) {
       strip.setPixelColor(i, strip.Color(gmap[red_val], 0, 0, gmap[128] ) );

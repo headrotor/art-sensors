@@ -46,9 +46,9 @@
 
 
 #include <StepControl.h>
+#include <Bounce.h>
 
-
-// Commands to start streaming data from 
+// Commands to start streaming data from
 uint8_t cmd1[] = {0x7D, 0x81, 0xA1, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
 uint8_t cmd2[] = {0x7D, 0x81, 0xAF, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
 
@@ -60,14 +60,21 @@ int led = 13;
 
 // global variables hold state from last serial packet
 int pulse  = 0;  // integer bpm
-int pstatus = 0; // Status byte, 
-int beat = 0; // heartbeat amplitude for graph 
+int pstatus = 0; // Status byte,
+int beat = 0; // heartbeat amplitude for graph
 int spo2 = 0;  // SpO2 value
 int hphase = 0; // hearbeat phase, don't quite understand this, bargraph shown at right of display?
 
 // set up stepper motor controller
 Stepper motor(2, 3);         // STEP pin: 2, DIR pin: 3
 StepControl<> controller;    // Use default settings
+int hunt_speed = -500000;
+int newpos;
+int oldpos;
+
+
+#define LIMIT_SW 23
+Bounce limit = Bounce(LIMIT_SW, 20);
 
 
 void setup()   {
@@ -75,15 +82,78 @@ void setup()   {
   Serial1.begin(115200); // hardware serial to device on gpio 0 and 1
   Serial.begin(115200);  // usb serial to host for debug
   pinMode(led, OUTPUT); // light LED on serial input from pulse meter
+  pinMode(LIMIT_SW, INPUT_PULLUP);
 
-  
+  newpos = 0;
+  // on power up, find limit switch
+  motor.setMaxSpeed(hunt_speed);         // stp/s
+  motor.setAcceleration(1000000);    // stp/s^2
+  limit.update();
+  while ((limit.fallingEdge() == 0) || (limit.read() == HIGH)  ) {
+    limit.update();
+    newpos = newpos + 150;
+    motor.setTargetAbs(newpos);
+    //show_one((uint8_t)(count++));
+    //show_white((uint8_t)(newpos >> 4));
+    controller.move(motor);
+    Serial.print("Searching for limit at ");
+    Serial.println(newpos);
+    delay(2);
+  }
+  //show_all(0, 128, 0);
+  Serial.print("Found  limit at ");
+  Serial.println(newpos);
+  // OK, found the limit switch, set this as zero
+  newpos = 0;
+  oldpos = 0;
+  // Set this position to zero on the motor
+  motor.setPosition(newpos);
+  // back off a few degrees?
+
+
+  // we are at the far negative extent so set the phase
+
+  //newpos = neutral;
+  //oldpos = neutral;
+  motor.setTargetAbs(newpos);
+  controller.move(motor);
+
   motor.setMaxSpeed(3000000);         // stp/s
   motor.setAcceleration(10000000);    // stp/s^2
 }
 
 int oldbeat = 0; // detect changes in heartbeat position
 
-void loop()
+void loop() {
+  attract_loop();
+
+}
+
+#define MIN_POS 0
+#define MAX_POS 12800
+
+
+
+const int attract_speed = 30000;
+void attract_loop() {
+
+
+  motor.setMaxSpeed(attract_speed);         // stp/s
+  motor.setAcceleration( 2 * attract_speed); // stp/s^2
+
+  motor.setTargetAbs(MIN_POS);
+  //motor.setTargetAbs(1000*hphase); // This doesn't work so great.
+  controller.move(motor);
+
+  motor.setMaxSpeed(2 * attract_speed);       // stp/s
+  motor.setAcceleration(5 * attract_speed); // stp/s^2
+
+  motor.setTargetAbs(MAX_POS);
+  //motor.setTargetAbs(1000*hphase); // This doesn't work so great.
+  controller.move(motor);
+}
+
+void data_loop()
 {
   // Do this to start serial streaming. Don't need it that often tho
   Serial1.write((uint8_t *) &cmd1, sizeof(cmd1));
@@ -95,23 +165,23 @@ void loop()
     parse_byte(Serial1.read());
   }
 
-  // if heartbeat position has changed, update motor position  
+  // if heartbeat position has changed, update motor position
   if (oldbeat != beat) {
-    motor.setTargetAbs(200*beat);
+    motor.setTargetAbs(200 * beat);
     //motor.setTargetAbs(1000*hphase); // This doesn't work so great.
     controller.move(motor);
     oldbeat = beat;
   }
-  
+
   delay(10);
 }
 
 
-/* 
- *  Parse the incomoing byte stream. Values are left in global variables pulse, spo2, and beat
- *  pstatus is refreshed every 
- *  
- */
+/*
+    Parse the incomoing byte stream. Values are left in global variables pulse, spo2, and beat
+    pstatus is refreshed every
+
+*/
 
 int bcount = -1; // byte count in this string
 uint8_t cstr[9]; // accumulate command in this buffer
@@ -152,7 +222,7 @@ void handle_packet() {
   pstatus = cstr[1];
   beat = cstr[3];
   pulse = cstr[5];
-  spo2 = cstr[6]; 
+  spo2 = cstr[6];
   hphase = cstr[4];
 
   for (int i = 0; i < 9; i++) {

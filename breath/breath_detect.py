@@ -7,6 +7,14 @@ import time
 import os
 import serial
 
+from blink1.blink1 import Blink1
+
+b1 = Blink1()
+b1.fade_to_rgb(1000, 64, 64, 64)
+
+
+
+
 if platform == 'win32':
     modulePath = os.path.join('C:/', 'Program Files', 'Walabot', 'WalabotSDK', 'Python', 'WalabotAPI.py')
 elif platform.startswith('linux'):
@@ -27,8 +35,14 @@ gain = 15.
 # first order highpass coefficient to remove dc offset
 hipass = 0.985
 
-#ser = serial.Serial('COM6', 115200, timeout=0)
+try:
+    ser = serial.Serial('COM3', 115200, timeout=0)
+except serial.SerialException:
+    print("could not find teensy, continuing")
+    ser = None
+    b1.fade_to_rgb(10, 0, 255 ,255) # yellow means no teensy
 
+    
 wlbt = load_source('WalabotAPI', modulePath)
 
 wlbt.Init()
@@ -69,7 +83,7 @@ def display_breath(energy):
     sys.stdout.flush()
 
 
-the_state = 'rest'
+the_state = 'xrest'
 # time of last transition
 last_transition = time.time()
 
@@ -78,17 +92,44 @@ def handle_state(delta_e):
     global last_transition
     ''' detect inhale and exhales by delta energy'''
 
-    if the_state == 'rest':
-        if delta_e > 100.:
+    min_i_thresh = 100 # need positive delta above this
+    max_i_thresh = 1200 # need positive delta below this (above this is motion)
+
+    min_x_thresh = -100
+    max_x_thresh = -1200
+
+    
+    if the_state == 'xrest':
+        if delta_e > min_i_thresh and delta_e < max_i_thresh:
             the_state = 'inhale'
+            print(the_state)
             last_transition = time.time()
             print("inhale at" + str(delta_e))
-                  
+            if ser is not None:
+                ser.write('i\n'.encode('utf-8'))
+            
     elif the_state == 'inhale':
         if time.time() - last_transition  > 1.0:
-            the_state = 'rest'
-            print("return to rest")
-    
+            the_state = 'irest'
+            print(the_state)
+            last_transition = time.time()
+
+    elif the_state == 'irest':
+        if delta_e < min_x_thresh and delta_e > max_x_thresh:
+            print("exhale at" + str(delta_e))
+            the_state = 'exhale'
+            print(the_state)
+            last_transition = time.time()
+            if ser is not None:
+                ser.write('x\n'.encode('utf-8'))
+
+    elif the_state == 'exhale':
+        if time.time() - last_transition  > 1.0:
+            the_state = 'xrest'
+            print(the_state)
+            last_transition = time.time()
+
+                
 def BreathingApp():
 
     bpos = 0.
@@ -104,7 +145,23 @@ def BreathingApp():
     # Configure Walabot database install location (for windows)
     wlbt.SetSettingsFolder()
     # 1) Connect : Establish communication with walabot.
-    wlbt.ConnectAny()
+
+    while True:
+        try:
+            wlbt.ConnectAny()
+        except wlbt.WalabotError:
+            print("could not connect to walabot") 
+            b1.fade_to_rgb(10, 255, 0 ,0)
+            time.sleep(1.0)
+            sys.stdout.flush()
+        else:
+            if ser is not None: # we opened serial port OK, go green
+                b1.fade_to_rgb(10, 0, 255 ,0)
+            else:
+                b1.fade_to_rgb(10, 0, 255 ,255) # yellow means no teensy
+            break # walabot OK, break out of loop
+
+        
     # 2) Configure: Set scan profile and arena
     # Set Profile - to Sensor-Narrow.
     wlbt.SetProfile(wlbt.PROF_SENSOR_NARROW)
@@ -124,6 +181,8 @@ def BreathingApp():
     e = 0;
     laste = 0;
     print("waiting to inhale")
+    if ser is not None: # exhale so we staert in the exhaled state
+        ser.write('x\n'.encode('utf-8'))
     
     while True:
         appStatus, calibrationProcess = wlbt.GetStatus()

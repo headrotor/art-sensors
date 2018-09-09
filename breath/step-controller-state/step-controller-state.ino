@@ -52,6 +52,7 @@ byte gmap[] = {
 
 int sensor_flag = 0;
 
+// usese TeensyStep library, install from here https://github.com/luni64/TeensyStep
 
 #include <StepControl.h>
 
@@ -74,9 +75,6 @@ StepControl<> controller;    // Use default settings
 #define EXHALE_PAUSE 3
 
 int m_state = EXHALE_PAUSE;
-
-
-
 
 
 char readstr[32];
@@ -173,8 +171,8 @@ void update_state() {
     case INHALE:
       if (! controller.isRunning()) {
         // we've reached the end of the breath, change state
-        Serial.println("in pause");
-        m_state = INHALE_PAUSE;
+        //Serial.println("in pause");
+        //m_state = INHALE_PAUSE;
         time_in_state = 0;
       }
       break;
@@ -193,8 +191,8 @@ void update_state() {
     case EXHALE:
       if (! controller.isRunning()) {
         // we've reached the end of the breath, change state
-        Serial.println("exhale pause");
-        m_state = EXHALE_PAUSE;
+        //Serial.println("exhale pause");
+        //m_state = EXHALE_PAUSE;
         time_in_state = 0;
       }
       break;
@@ -214,6 +212,32 @@ void update_state() {
   //Serial.println(m_state);
 }
 
+void inhale_now() {
+  // jumpstart state machine from external trigger
+  if (m_state != EXHALE){
+    // ignore commands unless exhaling
+    return;
+  }
+  Serial.println("inhaling now");
+  m_state = EXHALE_PAUSE;
+  time_in_state = 999;
+  update_state();
+}
+
+void exhale_now() {
+  // jumpstart state machine from external trigger
+  if (m_state != INHALE){
+    // ignore commands unless inhaling
+    return;
+  }
+  
+  Serial.println("exhaling now");
+  m_state = INHALE_PAUSE;
+  time_in_state = 999;
+  update_state();
+}
+
+
 
 void loop() {
   motor.setMaxSpeed(800 + 300 * r_speed);       // stp/s
@@ -223,6 +247,10 @@ void loop() {
   up_button.update();
   dn_button.update();
 
+
+  while (Serial.available() > 0) {
+    handle_serial(Serial.read());  //gets one byte from serial buffer and deal with it
+  }
 
   if (digitalRead(SMOKE_ALARM) == HIGH) {
     smoke_value = 1.0;
@@ -246,11 +274,34 @@ float motor_pos(void) {
   int pos = motor.getPosition();
   int ext = MAX_TICKS - MIN_TICKS;
   return ( float(pos - MIN_TICKS) / float(ext) );
-
-
-
 }
 
+void handle_serial(char c) {
+  if (c == '\n') { // newline; end of string
+    //Serial.print("got ");
+    //Serial.println(readstr);
+    switch (readstr[0]) {
+      case 'x':
+        exhale_now();
+        break;
+      case 'i':
+        inhale_now();
+        break;
+
+    }
+    //newpos = atoi(readstr);
+    //Serial.println(newpos);
+    strptr = 0;
+
+    if (sensor_flag == 0) {
+      sensor_flag = 1;
+    }
+  }
+  else {
+    readstr[strptr++] = c; // continue adding to existing str
+    readstr[strptr] = '\0';
+  }
+}
 
 void oldloop() {
   //delay(3);  //delay to allow buffer to fill
@@ -421,7 +472,7 @@ void breathe_led_float(float val) {
   val = 1.0 - val;
   // 0 <= val < 1.0
   // simulate breathing by lighting up progressive brightness and number of leds
-  int red_val = gmap[int(255.0*smoke_value)];
+  int red_val = gmap[int(255.0 * smoke_value)];
 
   // light up a fraction of the brightness
   int bright = gmap[int(255 * val)];
@@ -431,7 +482,7 @@ void breathe_led_float(float val) {
       strip.setPixelColor(i, strip.Color(bright, bright, bright ) );
     }
     else {
-      strip.setPixelColor(i, strip.Color(0,red_val,0 ) );
+      strip.setPixelColor(i, strip.Color(0, red_val, 0 ) );
     }
   }  // light up some fraction of the leds to full
 

@@ -126,6 +126,7 @@ int oldbeat = 0; // detect changes in heartbeat position
 
 void loop() {
   attract_loop();
+  //stepper_loop();
 
 }
 
@@ -153,11 +154,21 @@ void attract_loop() {
   controller.move(motor);
 }
 
-void data_loop()
-{
-  // Do this to start serial streaming. Don't need it that often tho
-  Serial1.write((uint8_t *) &cmd1, sizeof(cmd1));
 
+int count = 999;
+
+void stepper_loop()
+{
+
+
+  // Do this to start serial streaming. Don't need it that often tho
+  if (count > 100) {
+    count = 0;
+    Serial1.write((uint8_t *) &cmd1, sizeof(cmd1));
+  }
+  count++;
+
+  
   digitalWrite(led, LOW);
   //Serial1.flush();
   while (Serial1.available()) {

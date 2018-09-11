@@ -129,6 +129,7 @@ void setup() {
   motor.setAcceleration(1000000);    // stp/s^2
   limit.update();
   while ((limit.fallingEdge() == 0) || (limit.read() == HIGH)  ) {
+    // Search for limit switch
     limit.update();
     newpos = newpos + 20;
     motor.setTargetAbs(newpos);
@@ -165,6 +166,9 @@ void setup() {
 elapsedMillis time_in_state;
 float smoke_value = 0.0;
 
+// true for automatic, false for sensor conrrol
+int automatic = 1;
+
 void update_state() {
 
   switch (m_state) {
@@ -172,7 +176,9 @@ void update_state() {
       if (! controller.isRunning()) {
         // we've reached the end of the breath, change state
         //Serial.println("in pause");
-        //m_state = INHALE_PAUSE;
+        if (automatic) {
+          m_state = INHALE_PAUSE;
+        }
         time_in_state = 0;
       }
       break;
@@ -192,7 +198,9 @@ void update_state() {
       if (! controller.isRunning()) {
         // we've reached the end of the breath, change state
         //Serial.println("exhale pause");
-        //m_state = EXHALE_PAUSE;
+        if (automatic) {
+          m_state = EXHALE_PAUSE;
+        }
         time_in_state = 0;
       }
       break;
@@ -214,7 +222,7 @@ void update_state() {
 
 void inhale_now() {
   // jumpstart state machine from external trigger
-  if (m_state != EXHALE){
+  if (m_state != EXHALE) {
     // ignore commands unless exhaling
     return;
   }
@@ -226,11 +234,11 @@ void inhale_now() {
 
 void exhale_now() {
   // jumpstart state machine from external trigger
-  if (m_state != INHALE){
+  if (m_state != INHALE) {
     // ignore commands unless inhaling
     return;
   }
-  
+
   Serial.println("exhaling now");
   m_state = INHALE_PAUSE;
   time_in_state = 999;

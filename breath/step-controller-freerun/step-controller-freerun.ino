@@ -167,7 +167,7 @@ elapsedMillis time_in_state;
 float smoke_value = 0.0;
 
 // true for automatic, false for sensor conrrol
-int automatic = 1;
+int automatic = 0;
 
 void update_state() {
 

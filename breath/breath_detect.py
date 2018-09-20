@@ -86,18 +86,26 @@ def display_breath(energy):
 the_state = 'xrest'
 # time of last transition
 last_transition = time.time()
+low_pass = 0.0
 
 def handle_state(delta_e):
     global the_state
     global last_transition
+    global low_pass
     ''' detect inhale and exhales by delta energy'''
 
-    min_i_thresh = 100 # need positive delta above this
+    a = 0.99
+    low_pass = a*low_pass + (1-a)*delta_e 
+    min_i_thresh = 150 # need positive delta above this
     max_i_thresh = 1200 # need positive delta below this (above this is motion)
 
-    min_x_thresh = -100
+    min_x_thresh = -150
     max_x_thresh = -1200
 
+    delta_e = low_pass
+
+    #print("{:05.1f}".format(0.1*delta_e))
+    #display_breath(delta_e*0.1)
     
     if the_state == 'xrest':
         if delta_e > min_i_thresh and delta_e < max_i_thresh:

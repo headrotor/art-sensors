@@ -182,6 +182,7 @@ void loop() {
 
   run_sw.update();
   if (run_sw.read() == HIGH) {
+    show_all(0,0,0);
     attract_loop();
   }
   else {
@@ -190,7 +191,7 @@ void loop() {
 }
 
 
-const int attract_speed = 30000;
+const int attract_speed = 50000;
 void attract_loop() {
 
 
@@ -232,6 +233,8 @@ void data_loop()
     motor.setMaxSpeed(3000000);         // stp/s
     motor.setAcceleration(10000000);    // stp/s^2
     float pos = map_beat_float(beat);
+    //Serial.println(pos);
+    graph_led_float(pos/2.);
     motor.setTargetAbs((int)(pos * MOTOR_RANGE) + MOTOR_MIN);
     controller.move(motor);
     oldbeat = beat;
@@ -266,6 +269,7 @@ void parse_byte(uint8_t b) {
 }
 
 float map_beat_float(int beat) {
+  // map integer heartbeat range into 0-1 float
   int bmin = 16;
   int bmax = 86;
 
@@ -334,7 +338,7 @@ void handle_packet() {
   }
   //Serial.println(">");
 
-  analyse_data();
+  //analyse_data();
   //print_data();
 }
 void show_one(uint8_t it) {
@@ -374,9 +378,9 @@ void graph_led_float(float val) {
       strip.setPixelColor(i, strip.Color(bright, bright, bright ) );
     }
     else {
-      ;
+      strip.setPixelColor(i, strip.Color(0, 0, 0 ) );
     }
-  }  // light up some fraction of the leds to full
+  }  
 
   strip.show();
 }

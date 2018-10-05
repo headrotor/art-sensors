@@ -44,40 +44,22 @@
 
 */
 
+#include "FastLED.h"
 
-#include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
-#include <avr/power.h>
-#endif
-
-#define NEO_PIN 6
+FASTLED_USING_NAMESPACE
 
 
+#define DATA_PIN    6
+//#define CLK_PIN   4
+#define LED_TYPE    WS2811
+#define COLOR_ORDER GRB
+#define NUM_LEDS    24
+CRGB leds[NUM_LEDS];
 
-#define NUM_LEDS 24
-#define BRIGHTNESS 50
-
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRB + NEO_KHZ800);
+#define BRIGHTNESS          96
+#define FRAMES_PER_SECOND  120
 
 
-byte gmap[] = {
-  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
-  1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
-  2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
-  5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
-  10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
-  17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
-  25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
-  37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
-  51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
-  69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
-  90, 92, 93, 95, 96, 98, 99, 101, 102, 104, 105, 107, 109, 110, 112, 114,
-  115, 117, 119, 120, 122, 124, 126, 127, 129, 131, 133, 135, 137, 138, 140, 142,
-  144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 167, 169, 171, 173, 175,
-  177, 180, 182, 184, 186, 189, 191, 193, 196, 198, 200, 203, 205, 208, 210, 213,
-  215, 218, 220, 223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255
-};
 
 
 #include <StepControl.h>
@@ -139,8 +121,11 @@ void setup()   {
   digitalWrite(RUN_LOW, LOW);
 
 
-  strip.begin();
-  strip.show(); // Initialize all pixels to 'off'
+  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  //FastLED.addLeds<LED_TYPE,DATA_PIN,CLK_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+
+  // set master brightness control
+  FastLED.setBrightness(BRIGHTNESS);
 
   newpos = 0;
   // on power up, find limit switch
@@ -158,7 +143,7 @@ void setup()   {
     Serial.println(newpos);
     delay(2);
   }
-  //show_all(0, 128, 0);
+  show_all(CRGB::Black);
   Serial.print("Found  limit at ");
   Serial.println(newpos);
   // OK, found the limit switch, set this as zero
@@ -182,11 +167,16 @@ void loop() {
 
   run_sw.update();
   if (run_sw.read() == HIGH) {
-    show_all(0,0,0);
+    show_all(0, 0, 0);
     attract_loop();
   }
   else {
     data_loop();
+    fadeToBlackBy( leds, NUM_LEDS, 60);
+
+    FastLED.show();
+    // insert a delay to keep the framerate modest
+    //FastLED.delay(1000 / FRAMES_PER_SECOND);
   }
 }
 
@@ -234,13 +224,13 @@ void data_loop()
     motor.setAcceleration(10000000);    // stp/s^2
     float pos = map_beat_float(beat);
     //Serial.println(pos);
-    graph_led_float(pos/2.);
+    graph_led_float(pos);
     motor.setTargetAbs((int)(pos * MOTOR_RANGE) + MOTOR_MIN);
     controller.move(motor);
     oldbeat = beat;
   }
 
-  delay(10);
+  FastLED.delay(10);
 }
 
 
@@ -341,7 +331,50 @@ void handle_packet() {
   //analyse_data();
   //print_data();
 }
-void show_one(uint8_t it) {
+
+
+
+void show_three(uint8_t it) {
+  fadeToBlackBy( leds, NUM_LEDS, 60);
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    ;
+  }
+
+  leds[(it % NUM_LEDS)] += CRGB::Green;
+  leds[((it + 8) % NUM_LEDS)] += CRGB::Blue;
+  leds[((it + 16) % NUM_LEDS)] += CRGB::Cyan;
+
+  FastLED.show();
+}
+
+
+void show_all( CRGB color) {
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[i] = color;
+  }
+
+  FastLED.show();
+}
+
+void graph_led_float(float val) {
+  int n = (int) (val * (NUM_LEDS));
+  int i = 0;
+  Serial.println(n);
+  for (i = 0; i < n; i++) {
+    leds[i].red += 30;
+  }
+  for (; i < NUM_LEDS; i++) {
+    //leds[i] = CRGB::Black;
+  }
+}
+
+void show_all(uint8_t r, uint8_t g, uint8_t b ) {
+
+}
+
+
+/* for adafruit neopixel
+  void show_one(uint8_t it) {
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, strip.Color(0, 0, 0) );
   }
@@ -350,9 +383,9 @@ void show_one(uint8_t it) {
   strip.setPixelColor(it % strip.numPixels(), strip.Color(gmap[128], gmap[128], gmap[128] ) );
   //}
   strip.show();
-}
+  }
 
-void show_three(uint8_t it) {
+  void show_three(uint8_t it) {
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, strip.Color(0, 0, 0) );
   }
@@ -363,9 +396,9 @@ void show_three(uint8_t it) {
   strip.setPixelColor((it + 16) % strip.numPixels(), strip.Color(gmap[128], gmap[128], gmap[128] ) );
   //}
   strip.show();
-}
+  }
 
-void graph_led_float(float val) {
+  void graph_led_float(float val) {
 
   // 0 <= val < 1.0
   // bargraph
@@ -380,14 +413,15 @@ void graph_led_float(float val) {
     else {
       strip.setPixelColor(i, strip.Color(0, 0, 0 ) );
     }
-  }  
+  }
 
   strip.show();
-}
+  }
 
-void show_all(uint8_t r, uint8_t g, uint8_t b ) {
+  void show_all(uint8_t r, uint8_t g, uint8_t b ) {
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, strip.Color(r, g, b, 0) );
   }
   strip.show();
-}
+  }
+*/

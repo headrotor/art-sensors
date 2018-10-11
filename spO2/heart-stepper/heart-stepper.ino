@@ -60,12 +60,11 @@ CRGB leds[NUM_LEDS];
 #define FRAMES_PER_SECOND  120
 
 
-
-
 #include <StepControl.h>
 
 #define MOTOR_MIN 0
-#define MOTOR_RANGE 12800
+//#define MOTOR_RANGE 12800
+#define MOTOR_RANGE 20000
 
 
 
@@ -167,42 +166,61 @@ void loop() {
 
   run_sw.update();
   if (run_sw.read() == HIGH) {
-    show_all(0, 0, 0);
+    //show_all(0, 0, 0);
     attract_loop();
   }
   else {
-    data_loop();
-    fadeToBlackBy( leds, NUM_LEDS, 60);
+    data_loop_async();
 
-    FastLED.show();
     // insert a delay to keep the framerate modest
     //FastLED.delay(1000 / FRAMES_PER_SECOND);
   }
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+
+  FastLED.show();
 }
 
 
 const int attract_speed = 50000;
+
+#define SYSTOLIC 1
+#define DIASTOLIC 0
+
+int attract_state = SYSTOLIC;
+
 void attract_loop() {
 
+  float mpos = (motor.getPosition() - MOTOR_MIN) / (float)MOTOR_RANGE;
+  graph_led_float(mpos);
 
-  motor.setMaxSpeed(attract_speed);         // stp/s
-  motor.setAcceleration( 2 * attract_speed); // stp/s^2
+  if (!controller.isRunning()) {
 
-  motor.setTargetAbs(MOTOR_MIN);
-  controller.move(motor);
+    if (attract_state == DIASTOLIC) {
+      motor.setMaxSpeed(attract_speed);         // stp/s
+      motor.setAcceleration( 2 * attract_speed); // stp/s^2
 
-  motor.setMaxSpeed(2 * attract_speed);       // stp/s
-  motor.setAcceleration(5 * attract_speed); // stp/s^2
+      motor.setTargetAbs(MOTOR_MIN);
+      controller.moveAsync(motor);
+      attract_state = SYSTOLIC;
+      Serial.println("sys");
+    }
 
-  motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE);
-  //motor.setTargetAbs(1000*hphase); // This doesn't work so great.
-  controller.move(motor);
+    else if (attract_state == SYSTOLIC) {
+    
+      motor.setMaxSpeed(2 * attract_speed);       // stp/s
+      motor.setAcceleration(5 * attract_speed); // stp/s^2
+
+      motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE);
+      controller.moveAsync(motor);
+      attract_state = DIASTOLIC;
+      Serial.println("sys");
+    }
+  }
 }
-
-
 int count = 999;
 
-void data_loop()
+
+void data_loop_async()
 {
   // Do this to start serial streaming. Don't need it that often tho
   if (count > 100) {
@@ -219,14 +237,19 @@ void data_loop()
   }
 
   // if heartbeat position has changed, update motor position
-  if (oldbeat != beat) {
+  if (oldbeat != beat)  {
     motor.setMaxSpeed(3000000);         // stp/s
     motor.setAcceleration(10000000);    // stp/s^2
     float pos = map_beat_float(beat);
-    //Serial.println(pos);
-    graph_led_float(pos);
-    motor.setTargetAbs((int)(pos * MOTOR_RANGE) + MOTOR_MIN);
-    controller.move(motor);
+    Serial.println(pos);
+
+    float mpos = (motor.getPosition() - MOTOR_MIN) / (float)MOTOR_RANGE;
+    graph_led_float(mpos);
+
+    if (!controller.isRunning()) {
+      motor.setTargetAbs((int)(pos * MOTOR_RANGE) + MOTOR_MIN);
+      controller.moveAsync(motor);
+    }
     oldbeat = beat;
   }
 
@@ -361,7 +384,7 @@ void graph_led_float(float val) {
   int i = 0;
   Serial.println(n);
   for (i = 0; i < n; i++) {
-    leds[i].red += 30;
+    leds[i].red += 20;
   }
   for (; i < NUM_LEDS; i++) {
     //leds[i] = CRGB::Black;

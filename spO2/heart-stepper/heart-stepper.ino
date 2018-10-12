@@ -62,10 +62,11 @@ CRGB leds[NUM_LEDS];
 
 #include <StepControl.h>
 
-#define MOTOR_MIN 0
-//#define MOTOR_RANGE 12800
-#define MOTOR_RANGE 20000
+#define PPR (4000)
 
+// 1600 ppr, so 1/2 revolution is 800 steps
+#define MOTOR_MIN 600
+#define MOTOR_RANGE (PPR/3)
 
 
 // motor scale MOTOR_MIN < motor pos < MOTOR_MIN + MOTOR_RANGE
@@ -94,7 +95,6 @@ int hphase = 0; // hearbeat phase, don't quite understand this, bargraph shown a
 // set up stepper motor controller
 Stepper motor(2, 3);         // STEP pin: 2, DIR pin: 3
 StepControl<> controller;    // Use default settings
-int hunt_speed = -500000;
 int newpos;
 int oldpos;
 
@@ -108,8 +108,12 @@ Bounce limit = Bounce(LIMIT_SW, 20);
 
 Bounce run_sw = Bounce(RUN_SW, 20);
 
+// ticks per degree
+int tpd = 0;
 void setup()   {
   int stepcount = 0;
+
+  tpd = (int) (PPR / (float) 360.0);
   Serial1.begin(115200); // hardware serial to device on gpio 0 and 1
   Serial.begin(115200);  // usb serial to host for debug
   pinMode(led, OUTPUT); // light LED on serial input from pulse meter
@@ -128,12 +132,12 @@ void setup()   {
 
   newpos = 0;
   // on power up, find limit switch
-  motor.setMaxSpeed(hunt_speed);         // stp/s
-  motor.setAcceleration(1000000);    // stp/s^2
+  motor.setMaxSpeed(10*PPR);         // stp/s
+  motor.setAcceleration(100*PPR);    // stp/s^2
   limit.update();
   while ((limit.fallingEdge() == 0) || (limit.read() == HIGH)  ) {
     limit.update();
-    newpos = newpos + 150;
+    newpos = newpos + 2*tpd;
     motor.setTargetAbs(newpos);
     show_three((uint8_t)(stepcount++));
     //show_white((uint8_t)(newpos >> 4));
@@ -181,7 +185,7 @@ void loop() {
 }
 
 
-const int attract_speed = 50000;
+const int attract_speed = 3*PPR;
 
 #define SYSTOLIC 1
 #define DIASTOLIC 0
@@ -196,24 +200,26 @@ void attract_loop() {
   if (!controller.isRunning()) {
 
     if (attract_state == DIASTOLIC) {
-      motor.setMaxSpeed(attract_speed);         // stp/s
-      motor.setAcceleration( 2 * attract_speed); // stp/s^2
+      motor.setMaxSpeed(PPR);         // stp/s
+      motor.setAcceleration( 2 * PPR); // stp/s^2
+      Serial.println("sys ");
+      Serial.println(motor.getPosition());
 
       motor.setTargetAbs(MOTOR_MIN);
       controller.moveAsync(motor);
       attract_state = SYSTOLIC;
-      Serial.println("sys");
     }
 
     else if (attract_state == SYSTOLIC) {
+      Serial.println("dias ");
+      Serial.println(motor.getPosition());
     
-      motor.setMaxSpeed(2 * attract_speed);       // stp/s
-      motor.setAcceleration(5 * attract_speed); // stp/s^2
+      motor.setMaxSpeed(3 * PPR);       // stp/s
+      motor.setAcceleration(2* PPR); // stp/s^2
 
-      motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE);
+      motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE - (75*tpd));
       controller.moveAsync(motor);
       attract_state = DIASTOLIC;
-      Serial.println("sys");
     }
   }
 }
@@ -238,8 +244,8 @@ void data_loop_async()
 
   // if heartbeat position has changed, update motor position
   if (oldbeat != beat)  {
-    motor.setMaxSpeed(3000000);         // stp/s
-    motor.setAcceleration(10000000);    // stp/s^2
+    motor.setMaxSpeed(10*PPR);         // stp/s
+    motor.setAcceleration(1*PPR);    // stp/s^2
     float pos = map_beat_float(beat);
     Serial.println(pos);
 
@@ -247,7 +253,7 @@ void data_loop_async()
     graph_led_float(mpos);
 
     if (!controller.isRunning()) {
-      motor.setTargetAbs((int)(pos * MOTOR_RANGE) + MOTOR_MIN);
+      motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (75*tpd))) + MOTOR_MIN);
       controller.moveAsync(motor);
     }
     oldbeat = beat;
@@ -382,7 +388,7 @@ void show_all( CRGB color) {
 void graph_led_float(float val) {
   int n = (int) (val * (NUM_LEDS));
   int i = 0;
-  Serial.println(n);
+  //Serial.println(n);
   for (i = 0; i < n; i++) {
     leds[i].red += 20;
   }

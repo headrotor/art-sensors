@@ -65,7 +65,7 @@ CRGB leds[NUM_LEDS];
 #define PPR (4000)
 
 // 1600 ppr, so 1/2 revolution is 800 steps
-#define MOTOR_MIN 600
+#define MOTOR_MIN 300
 #define MOTOR_RANGE (PPR/3)
 
 
@@ -209,6 +209,7 @@ void attract_loop() {
       controller.moveAsync(motor);
       attract_state = SYSTOLIC;
     }
+    
 
     else if (attract_state == SYSTOLIC) {
       Serial.println("dias ");
@@ -217,7 +218,7 @@ void attract_loop() {
       motor.setMaxSpeed(3 * PPR);       // stp/s
       motor.setAcceleration(2* PPR); // stp/s^2
 
-      motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE - (75*tpd));
+      motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE - (45*tpd));
       controller.moveAsync(motor);
       attract_state = DIASTOLIC;
     }
@@ -244,7 +245,7 @@ void data_loop_async()
 
   // if heartbeat position has changed, update motor position
   if (oldbeat != beat)  {
-    motor.setMaxSpeed(10*PPR);         // stp/s
+    motor.setMaxSpeed(1*PPR);         // stp/s
     motor.setAcceleration(1*PPR);    // stp/s^2
     float pos = map_beat_float(beat);
     Serial.println(pos);
@@ -253,7 +254,7 @@ void data_loop_async()
     graph_led_float(mpos);
 
     if (!controller.isRunning()) {
-      motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (75*tpd))) + MOTOR_MIN);
+      motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (15*tpd))) + MOTOR_MIN);
       controller.moveAsync(motor);
     }
     oldbeat = beat;

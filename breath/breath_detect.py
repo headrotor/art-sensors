@@ -94,18 +94,18 @@ def handle_state(delta_e):
     global low_pass
     ''' detect inhale and exhales by delta energy'''
 
-    a = 0.99
+    a = 0.97
     low_pass = a*low_pass + (1-a)*delta_e 
-    min_i_thresh = 150 # need positive delta above this
+    min_i_thresh = 100 # need positive delta above this
     max_i_thresh = 1200 # need positive delta below this (above this is motion)
 
-    min_x_thresh = -150
+    min_x_thresh = -100
     max_x_thresh = -1200
 
     delta_e = low_pass
 
     #print("{:05.1f}".format(0.1*delta_e))
-    #display_breath(delta_e*0.1)
+    display_breath(delta_e*0.2)
     
     if the_state == 'xrest':
         if delta_e > min_i_thresh and delta_e < max_i_thresh:

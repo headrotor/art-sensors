@@ -27,7 +27,7 @@ gain = 15.
 # first order highpass coefficient to remove dc offset
 hipass = 0.985
 
-ser = serial.Serial('COM6', 115200, timeout=0)
+ser = serial.Serial('COM3', 115200, timeout=0)
 
 wlbt = load_source('WalabotAPI', modulePath)
 

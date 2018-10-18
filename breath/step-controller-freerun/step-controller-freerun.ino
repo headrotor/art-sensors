@@ -4,8 +4,11 @@
   use analog input to control stepper motor output
 */
 
+
+#define PPR 4000
+
 #define MIN_TICKS 0
-#define MAX_TICKS 3200
+#define MAX_TICKS 2000
 
 
 #include <Adafruit_NeoPixel.h>
@@ -167,7 +170,7 @@ elapsedMillis time_in_state;
 float smoke_value = 0.0;
 
 // true for automatic, false for sensor conrrol
-int automatic = 0;
+int automatic = 1;
 
 void update_state() {
 

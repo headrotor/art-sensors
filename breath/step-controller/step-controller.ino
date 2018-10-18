@@ -8,18 +8,20 @@
 #define MAX_TICKS 3200
 
 
+
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
-#include <avr/power.h>
-#endif
+
+#define NEO_PIN 6
 
 #define PIN 6
 
-#define NUM_LEDS 24
+#define NUM_LEDS 12
 
 #define BRIGHTNESS 50
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800);
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRBW + NEO_KHZ800);
+
 
 byte neopix_gamma[] = {
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -55,6 +57,12 @@ Stepper motor(2, 3);         // STEP pin: 2, DIR pin: 3
 StepControl<> controller;    // Use default settings
 #include <Bounce.h>
 
+#define PPR (4000)
+
+// 1600 ppr, so 1/2 revolution is 800 steps
+#define MOTOR_MIN 300
+#define MOTOR_RANGE (PPR/2)
+
 
 char readstr[32];
 int strptr = 0;
@@ -64,10 +72,11 @@ int pos = 0;
 
 int max_speed = 320000;
 int hunt_speed = -50000;
-
-
-
 int max_accel = 3000000;
+
+
+int run_accel =  10* PPR;
+int run_speed = 10 * PPR;
 
 // Start at maxium low
 float phase = 3 * PI / 2;
@@ -107,7 +116,7 @@ void setup() {
   limit.update();
   while (limit.fallingEdge() == 0 ) {
     limit.update();
-    newpos = newpos + 20;
+    newpos = newpos + 10;
     motor.setTargetAbs(newpos);
     show_one((uint8_t)(count++));
     //show_white((uint8_t)(newpos >> 4));
@@ -134,9 +143,9 @@ void setup() {
   motor.setTargetAbs(newpos);
   controller.move(motor);
 
-  motor.setMaxSpeed(max_speed);         // stp/s
+  motor.setMaxSpeed(run_speed);         // stp/s
   //motor.setPullInSpeed(max_speed + 1);         // stp/s
-  motor.setAcceleration(max_accel);    // stp/s^2
+  motor.setAcceleration(run_accel);    // stp/s^2
 }
 
 
@@ -146,10 +155,10 @@ void loop() {
     char c = Serial.read();  //gets one byte from serial buffer
     if (c == '\n') {
       // newline; terminate string
-      //Serial.println("got!");
+      Serial.println("got!");
       //Serial.println(readstr);
       newpos = atoi(readstr);
-      //Serial.println(newpos);
+      Serial.println(newpos);
       strptr = 0;
 
       if (sensor_flag == 0) {
@@ -158,7 +167,7 @@ void loop() {
         motor.setMaxSpeed(hunt_speed);         // stp/s
         motor.setTargetAbs(newpos);
         controller.move(motor);
-        motor.setMaxSpeed(max_speed);         // stp/s
+        motor.setMaxSpeed(run_speed);         // stp/s
       }
 
     }
@@ -169,99 +178,20 @@ void loop() {
     }
   }
 
-  if (sensor_flag == 0) { // attract mode
-    //newpos = (int) ((MAX_TICKS - MIN_TICKS) / 2 * sin(phase)) + MIN_TICKS + (MAX_TICKS - MIN_TICKS) / 2;
-    //phase = phase + 0.06;
-    //delay(2);
-
-    // hack to get smooth motion.
-    //take down acceleration,
-    // move between min and max
-
-    motor.setAcceleration(2000);         // stp/s
-
-    while (1) {
-
-      motor.setMaxSpeed(800 + 300 * r_speed);       // stp/s
-
-
-      run_sw.update();
-      up_button.update();
-      dn_button.update();
-
-      if (run_sw.read()) {
-        Serial.println("inhale");
-        motor.setTargetAbs(MAX_TICKS);
-        controller.move(motor);
-        bargraph_1(2);
-        Serial.println("exhale");
-        delay(200);
-        motor.setTargetAbs(MIN_TICKS);
-        controller.move(motor);
-        bargraph_1(13);
-        delay(300);
-
-      } else { // run switch is not set, so look at limits
-
-        bargraph_1(r_speed);
-        run_sw.update();
-        up_button.update();
-        dn_button.update();
-
-        if (up_button.fallingEdge()) {
-          Serial.println("Up");
-          r_speed += 1;
-          if (r_speed > 15) {
-            r_speed = 15;
-          }
-        }
-        else if (dn_button.fallingEdge()) {
-          Serial.println("Dn");
-          r_speed -= 1;
-          if (r_speed < 0) {
-            r_speed = 0;
-          }
-
-        }
-        bargraph_1(r_speed);
-        motor.setMaxSpeed(800 + 300 * r_speed);       // stp/s
-      }
-
-    }
-  }
-  //sensorValue = analogRead(A1);
-  // map it to the range of the analog out:
-  //outputValue = map(sensorValue, 0, 1023, min_speed, max_speed);
-  //motor.setMaxSpeed(outputValue);
-
-  /*
-    while (newpos != pos || 0) {
-      if (pos > newpos) {
-        pos -= slew;
-      }
-      else if (pos < newpos) {
-        pos += slew;
-      }
-      motor.setTargetAbs(newpos);  // Set target position to 1000 steps from current position
-      controller.move(motor);
-    }
-  */
-
   if ( newpos != oldpos) {
-    motor.setTargetAbs(newpos);  // new target position
-    controller.move(motor);
-    // rough maximum is 2000, map to 250
-    // show_white((uint8_t)(newpos >> 3));
-    Serial.println(newpos);
+
+    if (!controller.isRunning()) {
+      motor.setTargetAbs(newpos);  // new target position
+      controller.moveAsync(motor);
+      // rough maximum is 2000, map to 250
+      // show_white((uint8_t)(newpos >> 3));
+    }
+    //Serial.println(newpos);
 
     bargraph_1((uint8_t)(newpos >> 7));
     oldpos = newpos;
   }
-
-  //Serial.print(outputValue);
-  //Serial.print("\n");
-  //Serial.println(outputValue);
-
+  delay(1);
 }
 
 void show_white(uint8_t val) {

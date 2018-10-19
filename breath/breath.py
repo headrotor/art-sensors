@@ -16,16 +16,22 @@ elif platform.startswith('linux'):
 # these are stepper steps so depends on driver settings
 # zero should be limit switch
 
-low_limit = 0
-high_limit = 1600
-# kind of the center point, return here at zero signal
-offset = high_limit/3
+
+
+# proportional to number of steps per rotation, kind of arbitrary
+step_factor = 300
+
+motor_low = -200
+motor_range = 2000
+
+
 
 # arbitrary numbers here, between 1 and 20?
-gain = 15.
+gain = 10.
 
 # first order highpass coefficient to remove dc offset
 hipass = 0.985
+envelope_hipass = 0.992
 
 ser = serial.Serial('COM3', 115200, timeout=0)
 
@@ -34,15 +40,6 @@ wlbt = load_source('WalabotAPI', modulePath)
 wlbt.Init()
 
 
-# def energy_to_steps(e):
-#     bpos += energy * 10e3 * 8.
-#     bpos = bpos * 0.995
-#     pos = int(bpos * 300)
-#     if pos > 1000:
-#         pos = 1000
-#     if pos < -1000:
-#         pos = -1000;
-    
 def chartx(x, clen=70, c='#'):
     """generate a string of max length clen which is a bargraph of 
     floating point value 0. <= x <= 1 consisting of character c """
@@ -59,14 +56,14 @@ def PrintBreathingEnergy(energy):
     print('{0:4d}'.format(int(10e7*energy)))
     sys.stdout.flush()
 
-def display_breath(energy):
-    pos = (energy + 200)/400.
-    if pos > 1.0:
-        pos = 1.0
-    if pos < 0.:
-         pos = 0. 
-    print(chartx(pos))
-    sys.stdout.flush()
+# def display_breath(energy):
+#     pos = (energy + 200)/400.
+#     if pos > 1.0:
+#         pos = 1.0
+#     if pos < 0.:
+#          pos = 0. 
+#     print(chartx(pos))
+#     sys.stdout.flush()
     
 def BreathingApp():
 
@@ -97,7 +94,11 @@ def BreathingApp():
     wlbt.Start()
     # 4) Trigger: Scan (sense) according to profile and record signals to be
     # available for processing and retrieval.
-    bpos = 0.
+
+    # floating point position
+    fpos = 0.
+    max_fpos = -10.
+    min_fpos = 10.
     while True:
         appStatus, calibrationProcess = wlbt.GetStatus()
         # 5) Trigger: Scan(sense) according to profile and record signals
@@ -109,29 +110,52 @@ def BreathingApp():
         # positive on inhale (motion away from sensor), negative on exhale.
         #pos = energy_to_steps(energy)
         # integrate energy to get position
-        bpos += float(energy) * 10e3 * gain
+        fpos += float(energy) * 10e3 * gain
         # high pass to remove DC and return to zero if no signal
-        bpos = bpos * hipass
+        fpos = fpos * hipass
+        max_fpos = max_fpos * envelope_hipass
+        min_fpos = min_fpos * envelope_hipass
         # add offset and scale to get stepper step position
-        pos = int(bpos * 300.) + offset
-        # clamp to min and max limits
-        if pos > high_limit:
-            pos = high_limit
-        if pos < low_limit:
-           pos = low_limit;
+        #pos = int(fpos * step_factor) + offset
 
+        # clamp to min and max limits
+        #if pos > high_limit:
+        #    pos = high_limit
+        #if pos < low_limit:
+        #   pos = low_limit;
+
+        if fpos > max_fpos:
+            max_fpos = fpos
+        if fpos < min_fpos:
+            min_fpos = fpos
+
+
+        # do our best to convert to 0-1 range
+        pos_range = max_fpos - min_fpos
+
+        # don't divide by zero
+        if pos_range < 5:
+            pos_range = 5
+
+        #pos_range = 15    
+        zpos = (fpos - min_fpos)/pos_range
+            
+        pos = int(motor_range*zpos) + motor_low
         # send the position data to the stepper controller over the serial port
-        ser.write(str(pos))
-        ser.write('\n')
+        ser.write("{:d}\n".format(int(pos)).encode('utf-8'))
+        ser.flushOutput()
+
 
         # display a bargraph
-        #print("{0:6.2f} ".format(bpos))
-        print("{0:6.2f} ".format(bpos) + chartx(float(pos - low_limit)/float(high_limit - low_limit)))
+        
+        
+        print("{0:6.2f} ".format(zpos))
+        print("{0:6.2f} ".format(pos) + chartx(zpos))
         sys.stdout.flush()
 
         # don't send data faster than the thing can handle
-        time.sleep(0.001)
-        #print('{}'.format(bpos))
+        #time.sleep(0.02)
+        #print('{}'.format(fpos))
         #PrintBreathingEnergy(energy)
     # 7) Stop and Disconnect.
     wlbt.Stop()

@@ -9,8 +9,8 @@ import os
 import serial
 
 
-low_limit = 1600
-high_limit = low_limit + 3200
+low_limit = 2500
+high_limit = low_limit + 2000
 # kind of the center point, return here at zero signal
 offset = high_limit/3
 
@@ -45,7 +45,7 @@ def TestingApp():
             pos = high_limit
         if pos < low_limit:
            pos = low_limit;
-           
+           git 
         # send the position data to the stepper controller over the serial port
         ser.write("{:d}\n".format(pos).encode('utf-8'))
         ser.flushOutput()

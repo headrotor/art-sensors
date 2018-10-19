@@ -20,7 +20,7 @@
 #define BRIGHTNESS 50
 
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRBW + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRB + NEO_KHZ800);
 
 
 byte neopix_gamma[] = {
@@ -75,8 +75,13 @@ int hunt_speed = -50000;
 int max_accel = 3000000;
 
 
-int run_accel =  10* PPR;
-int run_speed = 10 * PPR;
+//int run_accel =  1* PPR;
+//int run_speed = 1* PPR;
+
+
+int run_speed = 320000;
+int run_accel = 2*PPR;
+
 
 // Start at maxium low
 float phase = 3 * PI / 2;
@@ -155,10 +160,10 @@ void loop() {
     char c = Serial.read();  //gets one byte from serial buffer
     if (c == '\n') {
       // newline; terminate string
-      Serial.println("got!");
+     //Serial.println("got!");
       //Serial.println(readstr);
       newpos = atoi(readstr);
-      Serial.println(newpos);
+      //Serial.println(newpos);
       strptr = 0;
 
       if (sensor_flag == 0) {

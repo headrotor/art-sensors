@@ -4,26 +4,32 @@
   use analog input to control stepper motor output
 */
 
-#define MIN_TICKS 0
-#define MAX_TICKS 3200
 
+/* Teensy 3.2 pinout:
 
+    Pin 2 Stepper count
+    Pin 3 Stepper  direction
 
+    Pin 6 - Neopixel data for both rings
+
+    Pin 14 - Smoke sensor input
+
+    Pin 22 - auto/sensor toggle, active low
+    Pin 23 - limit switch, active low
+
+*/
+
+// Can't use fastLED for 4-color (RGBW) neopixels
 #include <Adafruit_NeoPixel.h>
 
 #define NEO_PIN 6
-
 #define PIN 6
-
 #define NUM_LEDS 12
-
 #define BRIGHTNESS 50
-
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRB + NEO_KHZ800);
 
-
-byte neopix_gamma[] = {
+byte gmap[] = {
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
   1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
@@ -44,6 +50,15 @@ byte neopix_gamma[] = {
 
 int sensor_flag = 0;
 
+#define INHALE 0
+#define INHALE_PAUSE 1
+#define EXHALE 2
+#define EXHALE_PAUSE 3
+
+// state machine for inhale/exhale
+int m_state = EXHALE_PAUSE;
+elapsedMillis time_in_state;
+float smoke_value = 0.0;
 
 #include <StepControl.h>
 
@@ -59,9 +74,15 @@ StepControl<> controller;    // Use default settings
 
 #define PPR (4000)
 
-// 1600 ppr, so 1/2 revolution is 800 steps
+// for sensor
 #define MOTOR_MIN 300
 #define MOTOR_RANGE (PPR/2)
+
+// for automatic breathing
+#define MIN_TICKS 500
+#define MAX_TICKS 2500
+int auto_speed = 3000;
+int auto_accel = 500;
 
 
 char readstr[32];
@@ -70,9 +91,6 @@ int newpos = 0;
 int oldpos = 0;
 int pos = 0;
 
-int max_speed = 320000;
-int hunt_speed = -50000;
-int max_accel = 3000000;
 
 
 //int run_accel =  1* PPR;
@@ -80,7 +98,7 @@ int max_accel = 3000000;
 
 
 int run_speed = 320000;
-int run_accel = 2*PPR;
+int run_accel = 2 * PPR;
 
 
 // Start at maxium low
@@ -96,8 +114,8 @@ Bounce run_sw = Bounce(RUN_SW, 20);
 Bounce up_button = Bounce(UP_BUTTON, 20);
 Bounce dn_button = Bounce(DN_BUTTON, 20);
 
-int slew = 1;
-int r_speed = 6;
+//int slew = 1;
+//int r_speed = 6;
 
 void setup() {
   int count = 0;
@@ -116,12 +134,13 @@ void setup() {
 
   newpos = 0;
   // on power up, find limit switch
-  motor.setMaxSpeed(hunt_speed);         // stp/s
-  motor.setAcceleration(1000000);    // stp/s^2
+  motor.setMaxSpeed(auto_speed);         // stp/s
+  motor.setAcceleration(auto_accel);    // stp/s^2
   limit.update();
+  int ppd = PPR / 360; // pulses per degree
   while (limit.fallingEdge() == 0 ) {
     limit.update();
-    newpos = newpos + 10;
+    newpos = newpos + ppd;
     motor.setTargetAbs(newpos);
     show_one((uint8_t)(count++));
     //show_white((uint8_t)(newpos >> 4));
@@ -153,28 +172,124 @@ void setup() {
   motor.setAcceleration(run_accel);    // stp/s^2
 }
 
-
 void loop() {
+
+  run_sw.update();
+  up_button.update();
+  dn_button.update();
+
+  if (run_sw.read()) {
+    // automatic mode, transition to next state if needed
+    update_state();
+  }
+  else {
+    // sensor mode, move to position based on data
+    update_sensor();
+  }
+  breathe_led_float(get_motor_pos());
+
+}
+
+
+float get_motor_pos(void) {
+  /// return motor position as a float between 0 and 1.
+  int pos = motor.getPosition();
+  int ext = MAX_TICKS - MIN_TICKS;
+  return ( float(pos - MIN_TICKS) / float(ext) );
+}
+
+
+void update_state() {
+  motor.setMaxSpeed(auto_speed);       // stp/s
+  motor.setAcceleration(auto_accel);         // stp/s
+  int automatic = 1;
+
+  switch (m_state) {
+    case INHALE:
+      if (! controller.isRunning()) {
+        // we've reached the end of the breath, change state
+        //Serial.println("in pause");
+        if (automatic) {
+          m_state = INHALE_PAUSE;
+        }
+        time_in_state = 0;
+      }
+      break;
+
+    case INHALE_PAUSE:
+      if (time_in_state > 200) {
+        Serial.println("exhale");
+        m_state = EXHALE;
+        motor.setTargetAbs(MAX_TICKS);
+        controller.moveAsync(motor);
+        delay(10);
+      }
+      break;
+
+
+    case EXHALE:
+      if (! controller.isRunning()) {
+        // we've reached the end of the breath, change state
+        //Serial.println("exhale pause");
+        if (automatic) {
+          m_state = EXHALE_PAUSE;
+        }
+        time_in_state = 0;
+      }
+      break;
+
+    case EXHALE_PAUSE:
+      //Serial.println(time_in_state);
+      if (time_in_state > 100) {
+        Serial.println("inhale");
+        m_state = INHALE;
+        motor.setTargetAbs(MIN_TICKS);
+        controller.moveAsync(motor);
+        delay(10);
+      }
+      break;
+  }
+  //Serial.print("Current state is ");
+  //Serial.println(m_state);
+}
+
+void inhale_now() {
+  // jumpstart state machine from external trigger
+  if (m_state != EXHALE) {
+    // ignore commands unless exhaling
+    return;
+  }
+  Serial.println("inhaling now");
+  m_state = EXHALE_PAUSE;
+  time_in_state = 999;
+  update_state();
+}
+
+void exhale_now() {
+  // jumpstart state machine from external trigger
+  if (m_state != INHALE) {
+    // ignore commands unless inhaling
+    return;
+  }
+
+  Serial.println("exhaling now");
+  m_state = INHALE_PAUSE;
+  time_in_state = 999;
+  update_state();
+}
+
+
+void update_sensor() {
   //delay(3);  //delay to allow buffer to fill
   if (Serial.available() > 0) {
     char c = Serial.read();  //gets one byte from serial buffer
     if (c == '\n') {
       // newline; terminate string
-     //Serial.println("got!");
+      //Serial.println("got!");
       //Serial.println(readstr);
       newpos = atoi(readstr);
       //Serial.println(newpos);
       strptr = 0;
-
-      if (sensor_flag == 0) {
-        // ease into new position
-        sensor_flag = 1;
-        motor.setMaxSpeed(hunt_speed);         // stp/s
-        motor.setTargetAbs(newpos);
-        controller.move(motor);
-        motor.setMaxSpeed(run_speed);         // stp/s
-      }
-
     }
     else {
 
@@ -199,9 +314,33 @@ void loop() {
   delay(1);
 }
 
+void breathe_led_float(float val) {
+  val = 1.0 - val;
+  // 0 <= val < 1.0
+  // simulate breathing by lighting up progressive brightness and number of leds
+  int red_val = gmap[int(255.0 * smoke_value)];
+
+  // light up a fraction of the brightness
+  int bright = gmap[int(255 * val)];
+  int bar = int(strip.numPixels() * val);
+  for (uint16_t i = 0; i < strip.numPixels(); i++) {
+    if (  (i < bar) || (i >= (strip.numPixels() - bar))) {
+      strip.setPixelColor(i, strip.Color(bright, bright, bright ) );
+    }
+    else {
+      strip.setPixelColor(i, strip.Color(0, red_val, 0 ) );
+    }
+  }  // light up some fraction of the leds to full
+
+  strip.show();
+}
+
+
+/************************************/
+
 void show_white(uint8_t val) {
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
-    strip.setPixelColor(i, strip.Color(0, 0, 0, neopix_gamma[val] ) );
+    strip.setPixelColor(i, strip.Color(0, 0, 0, gmap[val] ) );
   }
   strip.show();
 }
@@ -211,7 +350,7 @@ void show_one(uint8_t it) {
   }
   //it = it & 0x0F;
   //if (it < strip.numPixels()) {
-  strip.setPixelColor(it % strip.numPixels(), strip.Color(0, 0, 0, neopix_gamma[128] ) );
+  strip.setPixelColor(it % strip.numPixels(), strip.Color(gmap[128], gmap[128], gmap[128], gmap[128] ) );
   //}
   strip.show();
 }
@@ -226,7 +365,7 @@ void show_all(uint8_t r, uint8_t g, uint8_t b ) {
 void bargraph_1(uint8_t val ) {
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     if (i < val) {
-      strip.setPixelColor(i, strip.Color(0, 0, 0, neopix_gamma[128] ) );
+      strip.setPixelColor(i, strip.Color(0, 0, 0, gmap[128] ) );
     } else {
       strip.setPixelColor(i, strip.Color(0, 0, 0, 0) );
     }

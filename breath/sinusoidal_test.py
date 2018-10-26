@@ -9,8 +9,9 @@ import os
 import serial
 
 
-low_limit = 2500
+low_limit = 500
 high_limit = low_limit + 2000
+
 # kind of the center point, return here at zero signal
 offset = high_limit/3
 

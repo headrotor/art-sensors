@@ -81,28 +81,34 @@ StepControl<> controller;    // Use default settings
 // for automatic breathing
 #define MIN_TICKS 500
 #define MAX_TICKS 2500
+
 int auto_speed = 3000;
 int auto_accel = 500;
 
+/*
+//First cut with slew limit
+int sensor_speed = 30 * PPR;
+int sensor_accel = 5 * PPR;
 
+// Limit motor position command to this
+int slew_limit = 50;
+*/
+
+
+int sensor_speed = 10 * PPR;
+int sensor_accel = 2 * PPR;
+
+// Limit motor position command to this
+int slew_limit = 2000;
+
+
+// serial input commands go in this buffer
 char readstr[32];
 int strptr = 0;
 int newpos = 0;
 int oldpos = 0;
 int pos = 0;
 
-
-
-//int run_accel =  1* PPR;
-//int run_speed = 1* PPR;
-
-
-int run_speed = 320000;
-int run_accel = 2 * PPR;
-
-
-// Start at maxium low
-float phase = 3 * PI / 2;
 
 #define LIMIT_SW 23
 #define RUN_SW 22
@@ -114,8 +120,6 @@ Bounce run_sw = Bounce(RUN_SW, 20);
 Bounce up_button = Bounce(UP_BUTTON, 20);
 Bounce dn_button = Bounce(DN_BUTTON, 20);
 
-//int slew = 1;
-//int r_speed = 6;
 
 void setup() {
   int count = 0;
@@ -134,13 +138,13 @@ void setup() {
 
   newpos = 0;
   // on power up, find limit switch
-  motor.setMaxSpeed(auto_speed);         // stp/s
-  motor.setAcceleration(auto_accel);    // stp/s^2
+  motor.setMaxSpeed(10*PPR);         // stp/s
+  motor.setAcceleration(1*PPR);    // stp/s^2
   limit.update();
   int ppd = PPR / 360; // pulses per degree
   while (limit.fallingEdge() == 0 ) {
     limit.update();
-    newpos = newpos + ppd;
+    newpos = newpos + 4 * ppd;
     motor.setTargetAbs(newpos);
     show_one((uint8_t)(count++));
     //show_white((uint8_t)(newpos >> 4));
@@ -167,9 +171,6 @@ void setup() {
   motor.setTargetAbs(newpos);
   controller.move(motor);
 
-  motor.setMaxSpeed(run_speed);         // stp/s
-  //motor.setPullInSpeed(max_speed + 1);         // stp/s
-  motor.setAcceleration(run_accel);    // stp/s^2
 }
 
 void loop() {
@@ -184,7 +185,7 @@ void loop() {
   }
   else {
     // sensor mode, move to position based on data
-    update_sensor();
+    update_sensor_limits();
   }
   breathe_led_float(get_motor_pos());
 
@@ -198,7 +199,13 @@ float get_motor_pos(void) {
   return ( float(pos - MIN_TICKS) / float(ext) );
 }
 
+void serialFlush(){
+  while(Serial.available() > 0) {
+    char t = Serial.read();
+  }
+  strptr = 0;
 
+}   
 void update_state() {
   motor.setMaxSpeed(auto_speed);       // stp/s
   motor.setAcceleration(auto_accel);         // stp/s
@@ -278,7 +285,58 @@ void exhale_now() {
   update_state();
 }
 
+int target_pos = MOTOR_MIN;
+void update_sensor_limits() {
+  //delay(3);  //delay to allow buffer to fill
+  if (Serial.available() > 0) {
+    char c = Serial.read();  //gets one byte from serial buffer
+    if (c == '\n') {
+      // newline; terminate string
+      //Serial.println("got!");
+      //Serial.println(readstr);
+      newpos = atoi(readstr);
+      //Serial.println(newpos);
+      strptr = 0;
+    }
+    else {
 
+      readstr[strptr++] = c; // continue adding to existing str
+      readstr[strptr] = '\0';
+    }
+  }
+
+  if ( newpos != oldpos) {
+
+    if (!controller.isRunning()) {
+      motor.setMaxSpeed(sensor_speed);       // stp/s
+      motor.setAcceleration(sensor_accel);         // stp/s
+
+      int pos = motor.getPosition();
+      int diff =  newpos - pos ;
+      int lim = slew_limit;
+      if (abs(diff) > lim) {
+        if (diff > 0) {
+          newpos = pos + lim;
+        }
+        else if (diff < 0) {
+          newpos = pos - lim;
+        }
+      }
+
+      serialFlush();
+
+      motor.setTargetAbs(newpos);  // new target position
+      controller.moveAsync(motor);
+      // rough maximum is 2000, map to 250
+      // show_white((uint8_t)(newpos >> 3));
+    }
+    //Serial.println(newpos);
+
+    bargraph_1((uint8_t)(newpos >> 7));
+    oldpos = newpos;
+  }
+  delay(1);
+}
 void update_sensor() {
   //delay(3);  //delay to allow buffer to fill
   if (Serial.available() > 0) {
@@ -301,6 +359,9 @@ void update_sensor() {
   if ( newpos != oldpos) {
 
     if (!controller.isRunning()) {
+
+      motor.setMaxSpeed(sensor_speed);       // stp/s
+      motor.setAcceleration(sensor_accel);         // stp/s
       motor.setTargetAbs(newpos);  // new target position
       controller.moveAsync(motor);
       // rough maximum is 2000, map to 250

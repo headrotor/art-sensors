@@ -21,8 +21,8 @@ elif platform.startswith('linux'):
 # proportional to number of steps per rotation, kind of arbitrary
 step_factor = 300
 
-motor_low = -200
-motor_range = 2000
+motor_low = 500
+motor_range = 1600
 
 
 
@@ -78,7 +78,11 @@ def BreathingApp():
     # Configure Walabot database install location (for windows)
     wlbt.SetSettingsFolder()
     # 1) Connect : Establish communication with walabot.
-    wlbt.ConnectAny()
+    try:
+        wlbt.ConnectAny()
+    except wlbt.WalabotError:
+        print("walabot not found")
+        exit(0)
     # 2) Configure: Set scan profile and arena
     # Set Profile - to Sensor-Narrow.
     wlbt.SetProfile(wlbt.PROF_SENSOR_NARROW)
@@ -103,7 +107,12 @@ def BreathingApp():
         appStatus, calibrationProcess = wlbt.GetStatus()
         # 5) Trigger: Scan(sense) according to profile and record signals
         # to be available for processing and retrieval.
-        wlbt.Trigger()
+        try:
+            wlbt.Trigger()
+        except wlbt.WalabotError:
+            # exit cleanly; wait for restart
+            print("disconnected");
+            exit(0)
         # 6) Get action: retrieve the last completed triggered recording
         energy = wlbt.GetImageEnergy()
         #energy seems to be some kind of differential signal.

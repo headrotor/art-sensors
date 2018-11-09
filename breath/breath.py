@@ -85,7 +85,7 @@ def BreathingApp():
         wlbt.ConnectAny()
     except wlbt.WalabotError:
         print("walabot not found")
-        exit(0)
+        exit(-1)
     # 2) Configure: Set scan profile and arena
     # Set Profile - to Sensor-Narrow.
     wlbt.SetProfile(wlbt.PROF_SENSOR_NARROW)
@@ -115,7 +115,7 @@ def BreathingApp():
         except wlbt.WalabotError:
             # exit cleanly; wait for restart
             print("disconnected");
-            exit(0)
+            exit(-1)
         # 6) Get action: retrieve the last completed triggered recording
         energy = wlbt.GetImageEnergy()
         #energy seems to be some kind of differential signal.

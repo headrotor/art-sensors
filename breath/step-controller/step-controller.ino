@@ -94,6 +94,8 @@ int sensor_accel = 5 * PPR;
 int slew_limit = 50;
 */
 
+// Todo: reset position with limit switch
+// more careful serial flush
 
 int sensor_speed = 10 * PPR;
 int sensor_accel = 2 * PPR;

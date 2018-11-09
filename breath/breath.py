@@ -7,6 +7,9 @@ import time
 import os
 import serial
 
+# todo:
+
+
 if platform == 'win32':
     modulePath = os.path.join('C:/', 'Program Files', 'Walabot', 'WalabotSDK', 'Python', 'WalabotAPI.py')
 elif platform.startswith('linux'):

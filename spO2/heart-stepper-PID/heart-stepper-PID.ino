@@ -167,8 +167,8 @@ void setup()   {
   //motor.setMaxSpeed(10 * PPR);       // stp/s
   //motor.setAcceleration(100 * PPR);  // stp/s^2
   blow_limit.update();
-  motor.setPullInSpeed(PPR/8);
-  motor.setMaxSpeed(PPR/8);
+  motor.setPullInSpeed(PPR / 8);
+  motor.setMaxSpeed(PPR / 8);
   controller.rotateAsync(motor);
   blow_limit.update();
   while ((blow_limit.fallingEdge() == 0) || (blow_limit.read() == HIGH)  ) {
@@ -209,7 +209,7 @@ void loop() {
   if (run_sw.read() == HIGH) {
     //if (run_sw.read() == HIGH) {
     //show_all(0, 0, 0);
-    attract_loop();
+    attract_loop_PID();
   }
   else {
     data_loop_async();
@@ -223,12 +223,61 @@ void loop() {
 }
 
 
+
+
+
 const int attract_speed = 3 * PPR;
+
+
+
 
 #define SYSTOLIC 1
 #define DIASTOLIC 0
 
 int attract_state = SYSTOLIC;
+
+
+// attraction phase
+static float aphase = 0.;
+
+
+void attract_loop_PID() {
+
+  aphase = aphase + 0.01;
+  float ftarget = 0.5 * (1 - cos(aphase));
+  //graph_led_float(mpos);
+  int target = (int)(MOTOR_RANGE * ftarget) + MOTOR_MIN;
+  Serial.println(target);
+
+
+  int diff = target - (int)motor.getPosition();
+
+  //if ( newpos != oldpos ) {
+  if (abs(diff) > 1)  {
+    // quasi PID: set rotation speed to difference (error signal)
+    //int off  = 100 * diff;
+
+
+    int off = 100 * diff;
+
+    motor.setPullInSpeed(off);
+    motor.setMaxSpeed(off);
+    //motor.setAcceleration(3200000);
+    controller.rotateAsync(motor);
+    Serial.print("move v");
+    Serial.println(off);
+    //delay(10);
+    //serialFlush();
+    //}
+    oldpos = newpos;
+  }
+
+  delay(2);
+
+
+
+}
+
 
 void attract_loop() {
 

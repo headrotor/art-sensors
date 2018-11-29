@@ -12,6 +12,7 @@
 
     Pin 6 - Neopixel data for both rings
 
+    Pin 13 - onboard LED
     Pin 14 - Smoke sensor input
 
     Pin 22 - auto/sensor toggle, active low
@@ -23,9 +24,8 @@
 #include <Adafruit_NeoPixel.h>
 
 #define NEO_PIN 6
-#define PIN 6
 #define NUM_LEDS 12
-#define BRIGHTNESS 50
+#define BRIGHTNESS 70
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, NEO_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -86,12 +86,12 @@ int auto_speed = 3000;
 int auto_accel = 500;
 
 /*
-//First cut with slew limit
-int sensor_speed = 30 * PPR;
-int sensor_accel = 5 * PPR;
+  //First cut with slew limit
+  int sensor_speed = 30 * PPR;
+  int sensor_accel = 5 * PPR;
 
-// Limit motor position command to this
-int slew_limit = 50;
+  // Limit motor position command to this
+  int slew_limit = 50;
 */
 
 // Todo: reset position with limit switch
@@ -111,11 +111,13 @@ int newpos = 0;
 int oldpos = 0;
 int pos = 0;
 
-
+// Pin definitions
 #define LIMIT_SW 23
 #define RUN_SW 22
 #define UP_BUTTON 21
 #define DN_BUTTON 20
+#define SMOKE_ALARM 14
+#define ONBOARD_LED 14
 
 Bounce limit = Bounce(LIMIT_SW, 20);
 Bounce run_sw = Bounce(RUN_SW, 20);
@@ -126,10 +128,12 @@ Bounce dn_button = Bounce(DN_BUTTON, 20);
 void setup() {
   int count = 0;
   // setup limit switch with pullup
+  pinMode(ONBOARD_LED, OUTPUT);
   pinMode(LIMIT_SW, INPUT_PULLUP);
   pinMode(RUN_SW, INPUT_PULLUP);
   pinMode(UP_BUTTON, INPUT_PULLUP);
   pinMode(DN_BUTTON, INPUT_PULLUP);
+  pinMode(SMOKE_ALARM, INPUT);
 
   // initialize serial communications at 9600 bps:
   Serial.begin(115200);
@@ -140,8 +144,8 @@ void setup() {
 
   newpos = 0;
   // on power up, find limit switch
-  motor.setMaxSpeed(10*PPR);         // stp/s
-  motor.setAcceleration(1*PPR);    // stp/s^2
+  motor.setMaxSpeed(10 * PPR);       // stp/s
+  motor.setAcceleration(1 * PPR);  // stp/s^2
   limit.update();
   int ppd = PPR / 360; // pulses per degree
   while (limit.fallingEdge() == 0 ) {
@@ -181,6 +185,9 @@ void loop() {
   up_button.update();
   dn_button.update();
 
+  // Turn off led if we've turned it on for status
+  digitalWrite(ONBOARD_LED, LOW);
+ 
   if (run_sw.read()) {
     // automatic mode, transition to next state if needed
     update_state();
@@ -189,8 +196,16 @@ void loop() {
     // sensor mode, move to position based on data
     update_sensor_limits();
   }
-  breathe_led_float(get_motor_pos());
 
+  if (digitalRead(SMOKE_ALARM) == HIGH) {
+    smoke_value = 1.0;
+  }
+  else {
+    // fade red to black slowly
+    smoke_value =  0.9999 * smoke_value;
+  }
+
+ breathe_led_float(get_motor_pos());
 }
 
 
@@ -201,13 +216,14 @@ float get_motor_pos(void) {
   return ( float(pos - MIN_TICKS) / float(ext) );
 }
 
-void serialFlush(){
-  while(Serial.available() > 0) {
+void serialFlush() {
+  while (Serial.available() > 0) {
     char t = Serial.read();
   }
   strptr = 0;
+}
 
-}   
+
 void update_state() {
   motor.setMaxSpeed(auto_speed);       // stp/s
   motor.setAcceleration(auto_accel);         // stp/s
@@ -291,6 +307,7 @@ int target_pos = MOTOR_MIN;
 void update_sensor_limits() {
   //delay(3);  //delay to allow buffer to fill
   if (Serial.available() > 0) {
+    digitalWrite(ONBOARD_LED,HIGH);
     char c = Serial.read();  //gets one byte from serial buffer
     if (c == '\n') {
       // newline; terminate string
@@ -339,59 +356,25 @@ void update_sensor_limits() {
   }
   delay(1);
 }
-void update_sensor() {
-  //delay(3);  //delay to allow buffer to fill
-  if (Serial.available() > 0) {
-    char c = Serial.read();  //gets one byte from serial buffer
-    if (c == '\n') {
-      // newline; terminate string
-      //Serial.println("got!");
-      //Serial.println(readstr);
-      newpos = atoi(readstr);
-      //Serial.println(newpos);
-      strptr = 0;
-    }
-    else {
-
-      readstr[strptr++] = c; // continue adding to existing str
-      readstr[strptr] = '\0';
-    }
-  }
-
-  if ( newpos != oldpos) {
-
-    if (!controller.isRunning()) {
-
-      motor.setMaxSpeed(sensor_speed);       // stp/s
-      motor.setAcceleration(sensor_accel);         // stp/s
-      motor.setTargetAbs(newpos);  // new target position
-      controller.moveAsync(motor);
-      // rough maximum is 2000, map to 250
-      // show_white((uint8_t)(newpos >> 3));
-    }
-    //Serial.println(newpos);
-
-    bargraph_1((uint8_t)(newpos >> 7));
-    oldpos = newpos;
-  }
-  delay(1);
-}
-
 void breathe_led_float(float val) {
   val = 1.0 - val;
   // 0 <= val < 1.0
   // simulate breathing by lighting up progressive brightness and number of leds
   int red_val = gmap[int(255.0 * smoke_value)];
 
+  Serial.println(smoke_value);
+
   // light up a fraction of the brightness
-  int bright = gmap[int(255 * val)];
+  int rgbright = gmap[int(255 * val)];
+  // make blue a little dimmer so light is a little warmer
+  int bbright = gmap[int(255 * val*0.7)];
   int bar = int(strip.numPixels() * val);
   for (uint16_t i = 0; i < strip.numPixels(); i++) {
     if (  (i < bar) || (i >= (strip.numPixels() - bar))) {
-      strip.setPixelColor(i, strip.Color(bright, bright, bright ) );
+      strip.setPixelColor(i, strip.Color(rgbright, rgbright, bbright ) );
     }
     else {
-      strip.setPixelColor(i, strip.Color(0, red_val, 0 ) );
+      strip.setPixelColor(i, strip.Color(red_val, 0,  0 ) );
     }
   }  // light up some fraction of the leds to full
 
@@ -435,3 +418,42 @@ void bargraph_1(uint8_t val ) {
   }
   strip.show();
 }
+/*
+void update_sensor() {
+  //delay(3);  //delay to allow buffer to fill
+  if (Serial.available() > 0) {
+    char c = Serial.read();  //gets one byte from serial buffer
+    if (c == '\n') {
+      // newline; terminate string
+      //Serial.println("got!");
+      //Serial.println(readstr);
+      newpos = atoi(readstr);
+      //Serial.println(newpos);
+      strptr = 0;
+    }
+    else {
+
+      readstr[strptr++] = c; // continue adding to existing str
+      readstr[strptr] = '\0';
+    }
+  }
+
+  if ( newpos != oldpos) {
+
+    if (!controller.isRunning()) {
+
+      motor.setMaxSpeed(sensor_speed);       // stp/s
+      motor.setAcceleration(sensor_accel);         // stp/s
+      motor.setTargetAbs(newpos);  // new target position
+      controller.moveAsync(motor);
+      // rough maximum is 2000, map to 250
+      // show_white((uint8_t)(newpos >> 3));
+    }
+    //Serial.println(newpos);
+
+    bargraph_1((uint8_t)(newpos >> 7));
+    oldpos = newpos;
+  }
+  delay(1);
+}
+*/

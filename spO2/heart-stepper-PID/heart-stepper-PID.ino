@@ -65,9 +65,13 @@
 
 */
 
+#include <StepControl.h>
+#include <Bounce.h>
 
 #include "FastLED.h"
 
+
+// --------------------- set up FastLED library ------------
 FASTLED_USING_NAMESPACE
 
 
@@ -82,20 +86,36 @@ CRGB leds[NUM_LEDS];
 #define FRAMES_PER_SECOND  120
 
 
-#include <StepControl.h>
+// --------------------- set up TeensyStepper library ------------
+// (library from here: https://github.com/luni64/TeensyStep
 
-#define PPR (3200)
+#define BLOW_PPR (3200)
+#define SQUEEZE_PPR (3200)
 
-// 1600 ppr, so 1/2 revolution is 800 steps
-#define MOTOR_MIN 300
-#define MOTOR_RANGE (PPR/3)
 
+// minimum and range of motion, in motor ticks
+#define BLOW_MIN 300
+#define BLOW_RANGE (BLOW_PPR/3)
+// Gain of PID loop (arbitrary units)
+#define BLOW_GAIN (100)
+
+#define SQUEEZE_MIN 300
+#define SQUEEZE_RANGE (SQUEEZE_PPR/3)
+#define SQUEEZE_GAIN (100)
 
 // motor scale MOTOR_MIN < motor pos < MOTOR_MIN + MOTOR_RANGE
 // negative scale for motion in opposite direction
 
+// set up stepper motor controller
+Stepper squeeze(2, 3);         // STEP pin: 2, DIR pin: 3
+Stepper blow(4, 5);         // STEP pin: 2, DIR pin: 3
 
-#include <Bounce.h>
+StepControl<> controller;    // Use default settings
+
+int newpos;
+int oldpos;
+
+//-------------------------- set up serial input from pulse oximeter----------------
 
 // Commands to start streaming data from
 uint8_t cmd1[] = {0x7D, 0x81, 0xA1, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
@@ -114,37 +134,29 @@ int beat = 0; // heartbeat amplitude for graph
 int spo2 = 0;  // SpO2 value
 int hphase = 0; // hearbeat phase, don't quite understand this, bargraph shown at right of display?
 
-// set up stepper motor controller
-//Stepper motor(2, 3);         // STEP pin: 2, DIR pin: 3
-Stepper motor(4, 5);         // STEP pin: 2, DIR pin: 3
-//Stepper squeeze(2, 3);         // STEP pin: 2, DIR pin: 3
-//Stepper blow(2, 3);         // STEP pin: 2, DIR pin: 3
-
-
-StepControl<> controller;    // Use default settings
-int newpos;
-int oldpos;
-
-
+// Set up input switches ---------------------------------------------------------------------------------------------
 // limit switches for each bellows
 #define BLOW_LIMIT 22
 #define SQUEEZE_LIMIT 23
 
-
+// limit swictehs to find extremes of motor movement
 Bounce blow_limit = Bounce(BLOW_LIMIT, 20);
 Bounce squeeze_limit = Bounce(SQUEEZE_LIMIT, 20);
 
 #define RUN_SW 12
 #define RUN_LOW 11
 
+// Switch between attract mode and sensor mode
 Bounce run_sw = Bounce(RUN_SW, 20);
 
 // ticks per degree
 int tpd = 0;
+
 void setup()   {
   int stepcount = 0;
 
-  tpd = (int) (PPR / (float) 360.0);
+  tpd = (int) (BLOW_PPR / (float) 360.0);
+
   Serial1.begin(115200); // hardware serial to device on gpio 0 and 1
   Serial.begin(115200);  // usb serial to host for debug
   pinMode(led, OUTPUT); // light LED on serial input from pulse meter
@@ -163,16 +175,18 @@ void setup()   {
   FastLED.setBrightness(BRIGHTNESS);
 
   newpos = 0;
-  // on power up, find limit switch
-  //motor.setMaxSpeed(10 * PPR);       // stp/s
-  //motor.setAcceleration(100 * PPR);  // stp/s^2
+  // on power up, hunt for limit switches
   blow_limit.update();
-  motor.setPullInSpeed(PPR / 8);
-  motor.setMaxSpeed(PPR / 8);
-  controller.rotateAsync(motor);
+  blow.setPullInSpeed(BLOW_PPR / 8);
+  blow.setMaxSpeed(BLOW_PPR / 8);
+  controller.rotateAsync(blow);
   blow_limit.update();
+  squeeze_limit.update();
+
+  int homed_motors = 0;
   while ((blow_limit.fallingEdge() == 0) || (blow_limit.read() == HIGH)  ) {
     blow_limit.update();
+    squeeze_limit.update();
     //newpos = newpos + 2*tpd;
     //motor.setTargetAbs(newpos);
     show_three((uint8_t)(stepcount++));
@@ -188,14 +202,12 @@ void setup()   {
   Serial.print("Found  limit at ");
   Serial.println(newpos);
   // OK, found the limit switch, set this as zero
-  newpos = 0;
-  oldpos = 0;
+  newpos = BLOW_MIN;
+  oldpos = BLOW_MIN;
   // Set this position to zero on the motor
-  motor.setPosition(newpos);
-  // back off a few degrees?
-
-  motor.setTargetAbs(newpos);
-  controller.move(motor);
+  blow.setPosition(newpos);
+  blow.setTargetAbs(newpos);
+  controller.move(blow);
 
 }
 
@@ -209,7 +221,7 @@ void loop() {
   if (run_sw.read() == HIGH) {
     //if (run_sw.read() == HIGH) {
     //show_all(0, 0, 0);
-    attract_loop_PID();
+    attract_loop_blow();
   }
   else {
     data_loop_async();
@@ -226,7 +238,7 @@ void loop() {
 
 
 
-const int attract_speed = 3 * PPR;
+const int attract_speed = 3 * BLOW_PPR;
 
 
 
@@ -238,19 +250,22 @@ int attract_state = SYSTOLIC;
 
 
 // attraction phase
-static float aphase = 0.;
+// phase for blow motor
+static float bphase = 0.;
+
+//phase for squeeze motor
+static float sphase = 0.;
 
 
-void attract_loop_PID() {
+void attract_loop_blow() {
 
-  aphase = aphase + 0.01;
-  float ftarget = 0.5 * (1 - cos(aphase));
+  bphase = bphase + 0.01;
+  float ftarget = 0.5 * (1 - cos(bphase));
   //graph_led_float(mpos);
-  int target = (int)(MOTOR_RANGE * ftarget) + MOTOR_MIN;
+  int target = (int)(BLOW_RANGE * ftarget) + BLOW_MIN;
   Serial.println(target);
 
-
-  int diff = target - (int)motor.getPosition();
+  int diff = target - (int)blow.getPosition();
 
   //if ( newpos != oldpos ) {
   if (abs(diff) > 1)  {
@@ -258,59 +273,56 @@ void attract_loop_PID() {
     //int off  = 100 * diff;
 
 
-    int off = 100 * diff;
+    // PID calculation, move with velocity proportional to offset
+    int off = BLOW_GAIN * diff;
 
-    motor.setPullInSpeed(off);
-    motor.setMaxSpeed(off);
-    //motor.setAcceleration(3200000);
-    controller.rotateAsync(motor);
+    blow.setPullInSpeed(off);
+    blow.setMaxSpeed(off);
+    //blow.setAcceleration(3200000);
+    controller.rotateAsync(blow);
     Serial.print("move v");
     Serial.println(off);
-    //delay(10);
-    //serialFlush();
-    //}
+
     oldpos = newpos;
   }
-
+  // Do we need to delay?  
   delay(2);
-
-
-
 }
 
-
+/*
 void attract_loop() {
-
-  float mpos = (motor.getPosition() - MOTOR_MIN) / (float)MOTOR_RANGE;
+  float mpos = (motor.getPosition() - SQUEEZE_MIN) / (float)SQUEEZE_RANGE;
   graph_led_float(mpos);
 
   if (!controller.isRunning()) {
 
     if (attract_state == DIASTOLIC) {
-      motor.setMaxSpeed(PPR);         // stp/s
-      motor.setAcceleration( 2 * PPR); // stp/s^2
+      squeeze.setMaxSpeed(SQUEEZE_PPR);         // stp/s
+      squeeze.setAcceleration( 2 * SQUEEZE_PPR); // stp/s^2
       Serial.println("sys ");
-      Serial.println(motor.getPosition());
+      Serial.println(squeeze.getPosition());
 
-      motor.setTargetAbs(MOTOR_MIN);
-      controller.moveAsync(motor);
+      squeeze.setTargetAbs(MOTOR_MIN);
+      controller.moveAsync(squeeze);
       attract_state = SYSTOLIC;
     }
 
 
     else if (attract_state == SYSTOLIC) {
       Serial.println("dias ");
-      Serial.println(motor.getPosition());
+      Serial.println(squeeze.getPosition());
 
-      motor.setMaxSpeed(3 * PPR);       // stp/s
-      motor.setAcceleration(2 * PPR); // stp/s^2
+      squeeze.setMaxSpeed(3 * PPR);       // stp/s
+      squeeze.setAcceleration(2 * PPR); // stp/s^2
 
-      motor.setTargetAbs(MOTOR_MIN + MOTOR_RANGE - (45 * tpd));
-      controller.moveAsync(motor);
+      squeeze.setTargetAbs(squeeze_MIN + squeeze_RANGE - (45 * tpd));
+      controller.moveAsync(squeeze);
       attract_state = DIASTOLIC;
     }
   }
 }
+*/
+
 int count = 999;
 
 
@@ -332,17 +344,17 @@ void data_loop_async()
 
   // if heartbeat position has changed, update motor position
   if (oldbeat != beat)  {
-    motor.setMaxSpeed(1 * PPR);       // stp/s
-    motor.setAcceleration(1 * PPR);  // stp/s^2
+    //motor.setMaxSpeed(1 * PPR);       // stp/s
+    //motor.setAcceleration(1 * PPR);  // stp/s^2
     float pos = map_beat_float(beat);
     Serial.println(pos);
 
-    float mpos = (motor.getPosition() - MOTOR_MIN) / (float)MOTOR_RANGE;
+    float mpos = (squeeze.getPosition() - SQUEEZE_MIN) / (float)SQUEEZE_RANGE;
     graph_led_float(mpos);
 
     if (!controller.isRunning()) {
-      motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (15 * tpd))) + MOTOR_MIN);
-      controller.moveAsync(motor);
+      //motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (15 * tpd))) + MOTOR_MIN);
+      //controller.moveAsync(motor);
     }
     oldbeat = beat;
   }

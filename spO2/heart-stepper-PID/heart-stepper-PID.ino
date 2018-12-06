@@ -107,15 +107,16 @@ CRGB leds[NUM_LEDS];
 // negative scale for motion in opposite direction
 
 // set up stepper motor controller
-Stepper squeeze(2, 3);         // STEP pin: 2, DIR pin: 3
-Stepper blow(4, 5);         // STEP pin: 2, DIR pin: 3
+Stepper squeeze(4, 5);         // STEP pin: 2, DIR pin: 3
+Stepper blow(2, 3);         // STEP pin: 2, DIR pin: 3
+//Stepper blow(4, 5);         // STEP pin: 2, DIR pin: 3
 
 StepControl<> controller;    // Use default settings
 
 int newpos;
 int oldpos;
 
-//-------------------------- set up serial input from pulse oximeter----------------
+//------------------------------------------------------ set up serial input from pulse oximeter----------------
 
 // Commands to start streaming data from
 uint8_t cmd1[] = {0x7D, 0x81, 0xA1, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
@@ -176,7 +177,6 @@ void setup()   {
 
   newpos = 0;
   // on power up, hunt for limit switches
-  blow_limit.update();
   blow.setPullInSpeed(BLOW_PPR / 8);
   blow.setMaxSpeed(BLOW_PPR / 8);
   controller.rotateAsync(blow);
@@ -184,7 +184,7 @@ void setup()   {
   squeeze_limit.update();
 
   int homed_motors = 0;
-  while ((blow_limit.fallingEdge() == 0) || (blow_limit.read() == HIGH)  ) {
+  while ((squeeze_limit.fallingEdge() == 0) || (squeeze_limit.read() == HIGH)  ) {
     blow_limit.update();
     squeeze_limit.update();
     //newpos = newpos + 2*tpd;
@@ -218,30 +218,30 @@ int stepcount = 0;
 void loop() {
 
   run_sw.update();
+
+  if (run_sw.fallingEdge()) {
+    // set velocity to zero
+    controller.stop();
+  }
+
   if (run_sw.read() == HIGH) {
     //if (run_sw.read() == HIGH) {
     //show_all(0, 0, 0);
     attract_loop_blow();
   }
   else {
-    data_loop_async();
+    //data_loop_async();
+    data_loop_PID();
 
     // insert a delay to keep the framerate modest
     //FastLED.delay(1000 / FRAMES_PER_SECOND);
   }
   fadeToBlackBy( leds, NUM_LEDS, 20);
-
   FastLED.show();
 }
 
 
-
-
-
 const int attract_speed = 3 * BLOW_PPR;
-
-
-
 
 #define SYSTOLIC 1
 #define DIASTOLIC 0
@@ -285,48 +285,16 @@ void attract_loop_blow() {
 
     oldpos = newpos;
   }
-  // Do we need to delay?  
+  // Do we need to delay?
   delay(2);
 }
 
-/*
-void attract_loop() {
-  float mpos = (motor.getPosition() - SQUEEZE_MIN) / (float)SQUEEZE_RANGE;
-  graph_led_float(mpos);
-
-  if (!controller.isRunning()) {
-
-    if (attract_state == DIASTOLIC) {
-      squeeze.setMaxSpeed(SQUEEZE_PPR);         // stp/s
-      squeeze.setAcceleration( 2 * SQUEEZE_PPR); // stp/s^2
-      Serial.println("sys ");
-      Serial.println(squeeze.getPosition());
-
-      squeeze.setTargetAbs(MOTOR_MIN);
-      controller.moveAsync(squeeze);
-      attract_state = SYSTOLIC;
-    }
-
-
-    else if (attract_state == SYSTOLIC) {
-      Serial.println("dias ");
-      Serial.println(squeeze.getPosition());
-
-      squeeze.setMaxSpeed(3 * PPR);       // stp/s
-      squeeze.setAcceleration(2 * PPR); // stp/s^2
-
-      squeeze.setTargetAbs(squeeze_MIN + squeeze_RANGE - (45 * tpd));
-      controller.moveAsync(squeeze);
-      attract_state = DIASTOLIC;
-    }
-  }
-}
-*/
 
 int count = 999;
 
 
-void data_loop_async()
+/*
+ * void data_loop_async()
 {
   // Do this to start serial streaming. Don't need it that often tho
   if (count > 100) {
@@ -349,8 +317,12 @@ void data_loop_async()
     float pos = map_beat_float(beat);
     Serial.println(pos);
 
+
     float mpos = (squeeze.getPosition() - SQUEEZE_MIN) / (float)SQUEEZE_RANGE;
     graph_led_float(mpos);
+    // PID calculation, move with velocity proportional to offset
+
+    
 
     if (!controller.isRunning()) {
       //motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (15 * tpd))) + MOTOR_MIN);
@@ -361,7 +333,62 @@ void data_loop_async()
 
   FastLED.delay(10);
 }
+*/
+int timeout = 0;
 
+void data_loop_PID()
+{
+  // Do this to start serial streaming. Don't need it that often tho
+  if (count > 100) {
+    count = 0;
+    Serial1.write((uint8_t *) &cmd1, sizeof(cmd1));
+  }
+  count++;
+  timeout++;
+
+  if (timeout == 100) {
+    Serial.println("timeout!");
+    controller.stop();
+  }
+
+  digitalWrite(led, LOW);
+  while (Serial1.available()) {
+    digitalWrite(led, HIGH);
+    parse_byte(Serial1.read());
+  }
+
+  // if heartbeat position has changed, update motor position
+  if (oldbeat != beat)  {
+    timeout = 0;
+    float pos = map_beat_float(beat);
+    Serial.println(pos);
+
+    graph_led_float(pos);
+
+    int target = (int)(BLOW_RANGE * pos) + BLOW_MIN;
+    int diff = target - (int)blow.getPosition();
+    Serial.println(target);
+
+    int off = 10 * diff;
+
+    blow.setPullInSpeed(off);
+    blow.setMaxSpeed(off);
+    //blow.setAcceleration(3200000);
+    controller.rotateAsync(blow);
+    Serial.print("move b");
+    Serial.println(off);
+
+
+
+    if (!controller.isRunning()) {
+      //motor.setTargetAbs((int)(pos * (MOTOR_RANGE - (15 * tpd))) + MOTOR_MIN);
+      //controller.moveAsync(motor);
+    }
+    oldbeat = beat;
+  }
+
+  //FastLED.delay(10);
+}
 
 /*
     Parse the incomoing byte stream. Values are left in global variables pulse, spo2, and beat

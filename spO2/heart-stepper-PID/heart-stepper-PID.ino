@@ -92,23 +92,27 @@ CRGB leds[NUM_LEDS];
 #define BLOW_PPR (3200)
 #define SQUEEZE_PPR (3200)
 
-
 // minimum and range of motion, in motor ticks
-#define BLOW_MIN 300
-#define BLOW_RANGE (BLOW_PPR/3)
-// Gain of PID loop (arbitrary units)
-//#define BLOW_GAIN (100)
-#define BLOW_GAIN (100)
+// Gain of PID loop is in arbitrary units
 
-#define SQUEEZE_MIN 300
-#define SQUEEZE_RANGE (SQUEEZE_PPR/3)
+// parameters for attract mode (automatic sinusoidal motion)
+#define BLOW_ATTRACT_MIN (BLOW_PPR/8)
+#define BLOW_ATTRACT_RANGE (BLOW_PPR/8)
+#define BLOW_ATTRACT_GAIN (30)
 
-
-#define BLOW_SIGNAL_GAIN (5)
-#define BLOW_ATTRACT_GAIN (50)
-
-#define SQUEEZE_SIGNAL_GAIN (20)
+#define SQUEEZE_ATTRACT_MIN (SQUEEZE_PPR/32)
+#define SQUEEZE_ATTRACT_RANGE (SQUEEZE_PPR/6)
 #define SQUEEZE_ATTRACT_GAIN (100)
+
+// Parameters for signal mode (servocontrol via Sp02 pulse signal)
+#define BLOW_SIGNAL_MIN (0)
+#define BLOW_SIGNAL_RANGE (BLOW_PPR/3)
+#define BLOW_SIGNAL_GAIN (5)
+
+#define SQUEEZE_SIGNAL_MIN (-SQUEEZE_PPR/24)
+#define SQUEEZE_SIGNAL_RANGE (SQUEEZE_PPR/5)
+#define SQUEEZE_SIGNAL_GAIN (30)
+
 
 
 // motor scale MOTOR_MIN < motor pos < MOTOR_MIN + MOTOR_RANGE
@@ -121,8 +125,6 @@ Stepper blow(4, 5);         // STEP pin: 2, DIR pin: 3
 
 StepControl<> controller;    // Use default settings
 
-int newpos;
-int oldpos;
 
 //------------------------------------------------------ set up serial input from pulse oximeter----------------
 
@@ -164,7 +166,8 @@ int tpd = 0;
 
 // attraction phase
 // global phase
-static float bphase = 0.;
+// *start attract loop at 90 degrees (cos(x) = 0)
+static float bphase = PI / 2;
 // floating point attract target
 static float ftarget = 0.;
 
@@ -190,57 +193,49 @@ void setup()   {
   // set master brightness control
   FastLED.setBrightness(BRIGHTNESS);
 
-  newpos = 0;
+
   // on power up, hunt for limit switches
-  squeeze.setPullInSpeed(SQUEEZE_PPR / 8);
-  squeeze.setMaxSpeed(SQUEEZE_PPR / 8);
+  squeeze.setPullInSpeed(0);
+  squeeze.setMaxSpeed(-SQUEEZE_PPR / 8);
   controller.rotateAsync(squeeze);
 
-  int homed_motors = 0;
   while ((squeeze_limit.fallingEdge() == 0) || (squeeze_limit.read() == HIGH)  ) {
     blow_limit.update();
     squeeze_limit.update();
-    //newpos = newpos + 2*tpd;
-    //motor.setTargetAbs(newpos);
     show_three((uint8_t)(stepcount++));
-    //show_white((uint8_t)(newpos >> 4));
-    //controller.move(motor);
-    Serial.print("Searching for limit at ");
-    Serial.println(newpos);
+
+
+    Serial.print("Searching for squeeze limit ");
+
     delay(20);
   }
-  controller.stop();
 
-  blow.setPullInSpeed(BLOW_PPR / 8);
-  blow.setMaxSpeed(BLOW_PPR / 8);
+  squeeze.setPosition(0);
+  squeeze.setTargetAbs(SQUEEZE_ATTRACT_MIN);
+  controller.move(squeeze);
+  //controller.stop();
+
+  blow.setPullInSpeed(BLOW_PPR / 4);
+  blow.setMaxSpeed(BLOW_PPR / 4);
   controller.rotateAsync(blow);
 
   while ((blow_limit.fallingEdge() == 0) || (blow_limit.read() == HIGH)  ) {
     blow_limit.update();
     squeeze_limit.update();
-    //newpos = newpos + 2*tpd;
-    //motor.setTargetAbs(newpos);
     show_three((uint8_t)(stepcount++));
-    //show_white((uint8_t)(newpos >> 4));
-    //controller.move(motor);
-    Serial.print("Searching for limit at ");
-    Serial.println(newpos);
+    Serial.print("Searching for blow limit");
     delay(20);
   }
-  controller.stop();
+  blow.setPosition(0);
+  blow.setTargetAbs(BLOW_ATTRACT_MIN);
+  controller.move(blow);
+
+  //controller.stop();
 
   show_all(CRGB::Black);
-  Serial.print("Found  limit at ");
-  Serial.println(newpos);
+  Serial.print("Found  limits ");
   // OK, found the limit switch, set this as zero
-  newpos = SQUEEZE_MIN;
-  oldpos = SQUEEZE_MIN;
   // Set this position to zero on the motor
-  squeeze.setPosition(newpos);
-  squeeze.setTargetAbs(newpos);
-  blow.setPosition(BLOW_MIN);
-  blow.setTargetAbs(BLOW_MIN);
-  controller.move(squeeze);
 
 }
 
@@ -256,7 +251,23 @@ void loop() {
 
   if (run_sw.fallingEdge()) {
     // set velocity to zero
+    blow.setMaxSpeed(BLOW_PPR / 4);
+    squeeze.setMaxSpeed(SQUEEZE_PPR / 4);
+    blow.setTargetAbs(BLOW_ATTRACT_MIN);
+    squeeze.setTargetAbs(SQUEEZE_ATTRACT_MIN);
+    controller.move(squeeze,blow);
     controller.stop();
+    return;
+  }
+  if (run_sw.risingEdge()) {
+    // set velocity to zero
+    blow.setMaxSpeed(BLOW_PPR / 4);
+    squeeze.setMaxSpeed(SQUEEZE_PPR / 4);
+    blow.setTargetAbs(BLOW_SIGNAL_MIN);
+    squeeze.setTargetAbs(SQUEEZE_SIGNAL_MIN);
+    controller.move(squeeze,blow);
+    controller.stop();
+    return;
   }
 
   if (run_sw.read() == HIGH) {
@@ -281,19 +292,21 @@ void loop() {
 
 void update_attract_target() {
   ftarget = 0.5 * (1 - cos(bphase));
-  
-  if (bphase > PI){
-    bphase += 0.02;
+
+  // Go faster in first two quadrants (descending cos values)
+  if (bphase > PI) {
+    bphase += 0.03;
   } else {
-    bphase += 0.01;
+    bphase += 0.015;
   }
 
-  if (bphase > 2*PI) {
-    bphase -= 2*PI;
+  // Wraparound
+  if (bphase > 2 * PI) {
+    bphase -= 2 * PI;
   }
 
   graph_led_float(ftarget);
-  
+
 }
 
 void attract_loop_squeeze() {
@@ -301,7 +314,7 @@ void attract_loop_squeeze() {
   int diff = 0;
   int target = 0;
 
-  target = (int)(SQUEEZE_RANGE * ftarget) + SQUEEZE_MIN;
+  target = (int)(SQUEEZE_ATTRACT_RANGE * ftarget) + SQUEEZE_ATTRACT_MIN;
   diff = target - (int)squeeze.getPosition();
 
   if (abs(diff) > 1)  {
@@ -323,7 +336,7 @@ void attract_loop_squeeze() {
 void attract_loop_blow() {
   int target = 0;
   int diff = 0;
-  target = (int)(BLOW_RANGE * ftarget) + BLOW_MIN;
+  target = (int)(BLOW_ATTRACT_RANGE * ftarget) + BLOW_ATTRACT_MIN;
   diff = target - (int)blow.getPosition();
   if (abs(diff) > 1)  {
     // PID calculation, move with velocity proportional to offset
@@ -373,16 +386,16 @@ void data_loop_squeeze() {
 
   graph_led_float(pos);
 
-  int target = (int)(SQUEEZE_RANGE * pos) + SQUEEZE_MIN;
+  int target = (int)(SQUEEZE_SIGNAL_RANGE * pos) + SQUEEZE_SIGNAL_MIN;
   int diff = target - (int)squeeze.getPosition();
   //Serial.println(target);
 
   off = SQUEEZE_SIGNAL_GAIN * diff;
   // twice as fast in diastolic
   if (diff < 0 ) {
-    off = 2*off;
-  } 
-  
+    off = 2 * off;
+  }
+
   squeeze.setPullInSpeed(off);
   squeeze.setMaxSpeed(off);
   controller.rotateAsync(squeeze);
@@ -396,7 +409,7 @@ void data_loop_blow() {
   // if heartbeat position has changed, update motor position
   float pos = 1 - map_beat_float(beat);
 
-  int target = (int)(BLOW_RANGE * pos) + BLOW_MIN;
+  int target = (int)(BLOW_SIGNAL_RANGE * pos) + BLOW_SIGNAL_MIN;
   int diff = target - (int)blow.getPosition();
 
   int off = BLOW_SIGNAL_GAIN * diff;

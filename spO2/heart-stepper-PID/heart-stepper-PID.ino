@@ -58,7 +58,8 @@
     Pin 12 - RUN switch, active low for motion
     Pin 13 - on-board LED
 
-
+    Pin 14 - L298 IN3
+    Pin 15 - L298 IN4
 
     Pin 22 - blow limit switch, active low
     Pin 23 - squeeze limit switch, active low
@@ -79,12 +80,19 @@ FASTLED_USING_NAMESPACE
 //#define CLK_PIN   4
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB
-#define NUM_LEDS    24
+#define NUM_LEDS    9
 CRGB leds[NUM_LEDS];
 
 #define BRIGHTNESS          96
 #define FRAMES_PER_SECOND  120
 
+// define L298 pins
+#define HBRIDGE_PIN3  14
+#define HBRIDGE_PIN4  15
+
+#define FORWARD 1
+#define STOPPED 0
+#define REVERSE (-1)
 
 // --------------------- set up TeensyStepper library ------------
 // (library from here: https://github.com/luni64/TeensyStep
@@ -100,7 +108,8 @@ CRGB leds[NUM_LEDS];
 #define BLOW_ATTRACT_RANGE (BLOW_PPR/8)
 #define BLOW_ATTRACT_GAIN (30)
 
-#define SQUEEZE_ATTRACT_MIN (SQUEEZE_PPR/32)
+//#define SQUEEZE_ATTRACT_MIN (SQUEEZE_PPR/64)
+#define SQUEEZE_ATTRACT_MIN (0)
 #define SQUEEZE_ATTRACT_RANGE (SQUEEZE_PPR/6)
 #define SQUEEZE_ATTRACT_GAIN (100)
 
@@ -141,7 +150,7 @@ int led = 13;
 // global variables hold state from last serial packet
 int pulse  = 0;  // integer bpm
 int pstatus = 0; // Status byte,
-int beat = 0; // heartbeat amplitude for graph
+int beat = -1; // heartbeat amplitude for graph; -1 means no signal
 int spo2 = 0;  // SpO2 value
 int hphase = 0; // hearbeat phase, don't quite understand this, bargraph shown at right of display?
 
@@ -174,6 +183,8 @@ static float ftarget = 0.;
 void setup()   {
   int stepcount = 0;
 
+  int update_led_count = 0;
+
   tpd = (int) (BLOW_PPR / (float) 360.0);
 
   Serial1.begin(115200); // hardware serial to device on gpio 0 and 1
@@ -183,9 +194,14 @@ void setup()   {
   pinMode(SQUEEZE_LIMIT, INPUT_PULLUP);
   pinMode(RUN_SW, INPUT_PULLUP);
   pinMode(RUN_LOW, OUTPUT);
+  pinMode(HBRIDGE_PIN3, OUTPUT);
+  pinMode(HBRIDGE_PIN4, OUTPUT);
+
   // virtual ground for run switch (running out of ground pins)
   digitalWrite(RUN_LOW, LOW);
 
+
+  set_systolic(FORWARD);
 
   FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   //FastLED.addLeds<LED_TYPE,DATA_PIN,CLK_PIN,COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
@@ -199,16 +215,21 @@ void setup()   {
   squeeze.setMaxSpeed(-SQUEEZE_PPR / 8);
   controller.rotateAsync(squeeze);
 
+
   while ((squeeze_limit.fallingEdge() == 0) || (squeeze_limit.read() == HIGH)  ) {
     blow_limit.update();
     squeeze_limit.update();
-    show_three((uint8_t)(stepcount++));
-
+    if (update_led_count++ > 2) {
+      show_three((uint8_t)(stepcount++), CRGB::Blue);
+      update_led_count = 0;
+    }
 
     Serial.print("Searching for squeeze limit ");
 
-    delay(20);
+    FastLED.delay(20);
   }
+
+  set_systolic(REVERSE);
 
   squeeze.setPosition(0);
   squeeze.setTargetAbs(SQUEEZE_ATTRACT_MIN);
@@ -222,7 +243,10 @@ void setup()   {
   while ((blow_limit.fallingEdge() == 0) || (blow_limit.read() == HIGH)  ) {
     blow_limit.update();
     squeeze_limit.update();
-    show_three((uint8_t)(stepcount++));
+    if (update_led_count++ > 2) {
+      show_three((uint8_t)(stepcount++), CRGB::Green);
+      update_led_count = 0;
+    }
     Serial.print("Searching for blow limit");
     delay(20);
   }
@@ -230,6 +254,8 @@ void setup()   {
   blow.setTargetAbs(BLOW_ATTRACT_MIN);
   controller.move(blow);
 
+  run_sw.update();
+  set_systolic(0);
   //controller.stop();
 
   show_all(CRGB::Black);
@@ -250,45 +276,77 @@ void loop() {
   run_sw.update();
 
   if (run_sw.fallingEdge()) {
-    // set velocity to zero
-    blow.setMaxSpeed(BLOW_PPR / 4);
-    squeeze.setMaxSpeed(SQUEEZE_PPR / 4);
-    blow.setTargetAbs(BLOW_ATTRACT_MIN);
-    squeeze.setTargetAbs(SQUEEZE_ATTRACT_MIN);
-    controller.move(squeeze,blow);
-    controller.stop();
-    return;
-  }
-  if (run_sw.risingEdge()) {
+    beat = -1;
+    //changed mode to signal.  Move to signal 0
     // set velocity to zero
     blow.setMaxSpeed(BLOW_PPR / 4);
     squeeze.setMaxSpeed(SQUEEZE_PPR / 4);
     blow.setTargetAbs(BLOW_SIGNAL_MIN);
     squeeze.setTargetAbs(SQUEEZE_SIGNAL_MIN);
-    controller.move(squeeze,blow);
-    controller.stop();
+    controller.move(squeeze, blow);
+    set_systolic(0);
+    //controller.stop();
+    return;
+  }
+  if (run_sw.risingEdge()) {
+    beat = -1;
+    bphase = PI / 2;
+    set_systolic(0);
+    // changed mode, to attract
+    // set velocity to zero
+    blow.setMaxSpeed(BLOW_PPR / 8);
+    squeeze.setMaxSpeed(SQUEEZE_PPR / 8);
+    blow.setTargetAbs(BLOW_ATTRACT_MIN + BLOW_ATTRACT_RANGE);
+    squeeze.setTargetAbs(SQUEEZE_ATTRACT_MIN + SQUEEZE_ATTRACT_RANGE);
+    controller.move(squeeze, blow);
+    //controller.stop();
+    update_attract_target();
     return;
   }
 
   if (run_sw.read() == HIGH) {
-
+    // high switch, use attract mode
     update_attract_target();
     attract_loop_blow();
     FastLED.delay(1);
     attract_loop_squeeze();
-    //FastLED.delay(1);
+    attract_loop_systolic();
+    FastLED.delay(1);
+
   }
   else {
+    // Low switch, use data
     get_serial();
-    data_loop_squeeze();
-    FastLED.delay(2);
-    data_loop_blow();
-    FastLED.delay(2);
+    if (beat > -1) {
+      data_loop_squeeze();
+      FastLED.delay(2);
+      data_loop_blow();
+      data_loop_systolic();
+      FastLED.delay(2);
+    }
+
   }
   fadeToBlackBy( leds, NUM_LEDS, 20);
   FastLED.show();
 }
 
+
+
+void set_systolic(int dir) {
+  if (dir == FORWARD) {
+    analogWrite(HBRIDGE_PIN3, 180);
+    analogWrite(HBRIDGE_PIN4, 0);
+    return;
+  }
+  if (dir == REVERSE) {
+    analogWrite(HBRIDGE_PIN3, 0);
+    analogWrite(HBRIDGE_PIN4, 180);
+    return;
+  }
+  // If called with any other value, turn off pump
+  analogWrite(HBRIDGE_PIN3, 0);
+  analogWrite(HBRIDGE_PIN4, 0);
+}
 
 void update_attract_target() {
   ftarget = 0.5 * (1 - cos(bphase));
@@ -351,6 +409,14 @@ void attract_loop_blow() {
   }
 }
 
+void attract_loop_systolic() {
+  if (ftarget > 0.5) {
+    set_systolic(FORWARD);
+  } else {
+    set_systolic(REVERSE);
+  }
+}
+
 int count = 999;
 
 int timeout = 0;
@@ -367,11 +433,14 @@ void get_serial() {
   if (timeout == 100) {
     Serial.println("timeout!");
     controller.stop();
+    beat = -1;
   }
 
   digitalWrite(led, LOW);
+  //set_systolic(0);
   while (Serial1.available()) {
     digitalWrite(led, HIGH);
+    //set_systolic(FORWARD);
     parse_byte(Serial1.read());
   }
 }
@@ -402,6 +471,35 @@ void data_loop_squeeze() {
   //Serial.print("move b");
   //Serial.println(off);
 
+}
+
+void data_loop_systolic_bipolar() {
+  static int oldbeat = -1;
+
+  // if heartbeat position has changed, update motor position
+  float pos = 1. - map_beat_float(beat);
+
+  if (beat != oldbeat) {
+    oldbeat = beat;
+    if (pos > 0.5)
+      set_systolic(FORWARD);
+    else
+      set_systolic(REVERSE);
+  } else {
+    set_systolic(0);
+  }
+}
+void data_loop_systolic() {
+  static int oldbeat = -1;
+
+  // if heartbeat position has changed, update motor position
+
+  if (beat != oldbeat) {
+    oldbeat = beat;
+    set_systolic(FORWARD);
+  } else {
+    set_systolic(0);
+  }
 }
 
 void data_loop_blow() {
@@ -519,15 +617,13 @@ void handle_packet() {
 
 
 
-void show_three(uint8_t it) {
+void show_three(uint8_t it, CRGB color) {
   fadeToBlackBy( leds, NUM_LEDS, 60);
   for (uint16_t i = 0; i < NUM_LEDS; i++) {
     ;
   }
 
-  leds[(it % NUM_LEDS)] += CRGB::Green;
-  leds[((it + 8) % NUM_LEDS)] += CRGB::Blue;
-  leds[((it + 16) % NUM_LEDS)] += CRGB::Cyan;
+  leds[(it % NUM_LEDS)] += color;
 
   FastLED.show();
 }
@@ -553,9 +649,6 @@ void graph_led_float(float val) {
   }
 }
 
-void show_all(uint8_t r, uint8_t g, uint8_t b ) {
-
-}
 
 
 /* for adafruit neopixel

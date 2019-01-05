@@ -492,7 +492,6 @@ void data_loop_systolic_bipolar() {
 void data_loop_systolic() {
   static int oldbeat = -1;
 
-  // if heartbeat position has changed, update motor position
 
   if (beat != oldbeat) {
     oldbeat = beat;

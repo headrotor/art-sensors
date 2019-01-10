@@ -137,7 +137,9 @@ void setup() {
 
   // initialize serial communications at 9600 bps:
   Serial.begin(115200);
-
+  Serial.println("step-controller.ino 1/10/19 J Foote (NO PID)");
+  delay(1000);
+  
   strip.setBrightness(BRIGHTNESS);
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'

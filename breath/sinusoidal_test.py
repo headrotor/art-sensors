@@ -9,15 +9,16 @@ import os
 import serial
 
 
-low_limit = 500
-high_limit = low_limit + 2000
+PPR = 4000
+
+low_limit = PPR/4
+high_limit = low_limit + PPR/2
 
 # kind of the center point, return here at zero signal
 offset = high_limit/3
 
 # arbitrary numbers here, between 1 and 20?
-gain = 15.
-ser = serial.Serial('COM3', 115200, timeout=0)
+ser = serial.Serial('COM6', 115200, timeout=0)
     
 def chartx(x, clen=70, c='#'):
     """generate a string of max length clen which is a bargraph of 

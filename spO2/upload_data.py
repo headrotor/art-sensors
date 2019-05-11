@@ -101,14 +101,14 @@ logfn = "contec.log"
 cmd1 = "7D 81 A1 80 80 80 80 80 80"
 
 # starts downloading stored data
-cmd1 = "7D 81 A6 80 80 80 80 80 80"
+#cmd1 = "7D 81 A6 80 80 80 80 80 80"
 
 # sent periodically by host --  Keep-alive? May not need this. 
 cmd2 = "7d 81 af 80 80 80 80 80 80"
 
 if __name__ == '__main__':
 
-    portname = "/dev/ttyUSB0"
+    portname = "/dev/ttyUSB1"
     portbaud = 115200
 
     try:
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         #    inbyte = ser.read(1)
         #    print("got" + str(inbyte))
     count = 0
-    print("{}, {}".format(int(inbytes[2] & 0x7f), int(inbytes[3] & 0x7f)))
+    #print("{}, {}".format(int(inbytes[2] & 0x7f), int(inbytes[3] & 0x7f)))
     while True:
         if ser.in_waiting >= 8:
             count += 1

@@ -117,10 +117,11 @@ if __name__ == '__main__':
     while keep_going:  # stream data until it stops
         if ser.in_waiting >= 9:
             packet_count += 1
-            inbytes = ser.read(9)
-            if inbytes[0] == 0x01: 
+            inbytes = ser.read(8)
+            wait_count = 0
+            if True or inbytes[0] == 0x01 or True: 
                 #print("got " + str(inbytes))
-                if inbytes[1] == 0xE0:
+                if True or inbytes[1] == 0xE0 or True:
                     # valid streaming data
                     #streaming pulse data
                     print("pulse: {}".format(int(inbytes[5] & 0x7f)))
@@ -131,8 +132,8 @@ if __name__ == '__main__':
                     #print(chartx((inbytes[3] & 0x7F)/100.,80)) 
                     #print([inbytes[n] & 0x7F for n in [3,4,5,6]])
                     sys.stdout.flush()
-                    logfile.write("{},".format(time.time()))
-                    logfile.write("{},{},{},{},{}\n".format(*[inbytes[n] & 0x7F for n in [2,3,4,5,6]]))
+                    #logfile.write("{},".format(time.time()))
+                    logfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(*[inbytes[n] & 0x7F for n in range(8)]))
                     logfile.flush()
                 else:
                     sys.stderr.write("Waiting for valid data\n")

@@ -66,10 +66,24 @@ logfn = "contec.log"
                                  next two bytes are pulse in BPM, and spO2 percent (high bit is set so AND with 0x7F to get integer values)
                                  Last two bytes are 0xFF
 """
+"""For downloaded (stored) data, data comes in 8 byte packets starting with
+0x0F, then 0x80, then three spo2 and pulse measurements in the remaining six bytes with the high bit set.  
+
+e.g.
+
+0F 80 S0 P0 S1 P1 S2 P2
+
+Where S0 and P0 are Spo2 percentage and pulse BPM for one
+measurement. Measurements are saved every second so the number of
+packets will be 1/3 the time of the stored data in
+seconds. Unrecognized pulse/SpO2 (because of finger out or bad
+readings are zero.
+
+Sometimes the 80 in the second byte has a bit set, this may indicate bad data. 
+
+"""
 
 
-# starts streaming real-time data (pulse)
-cmd1 = "7D 81 A1 80 80 80 80 80 80"
 
 # starts downloading stored data
 cmd1 = "7D 81 A6 80 80 80 80 80 80"
@@ -95,50 +109,63 @@ if __name__ == '__main__':
         logfn = sys.argv[1]
         logfile = open(logfn, 'w')
         sys.stderr.write("Writing data to file ()\n".format(logfn))
+
     else:
         logfn = "stdout"
         logfile = sys.stdout
-
+    
+    logfile.write("seconds, flags, spO2 (%), pulse (bpm)".format(time.time()))
     # convert ascii hex to bytes
     cmd1 = [int(s,16) for s in cmd1.split()]
     cmd2 = [int(s,16) for s in cmd2.split()]
     #print(pre_bytes)
     
     ser.write(cmd1) # this command starts dumping downloaded data
-    # there;s probably a command that tells how much data is available but
+    # there;s probably a command that returns how much data is available but
     # I don't know what it is. Just stream data until it stops. 
 
     ser.write(cmd2)
     time.sleep(0.05)
 
     packet_count = 0
+    seconds = 0
+    minutes = 1
     wait_count = 0
     keep_going = True
     while keep_going:  # stream data until it stops
         if ser.in_waiting >= 9:
             packet_count += 1
             inbytes = ser.read(8)
+            #print("got " + str(inbytes))
             wait_count = 0
             if True or inbytes[0] == 0x01 or True: 
                 #print("got " + str(inbytes))
                 if True or inbytes[1] == 0xE0 or True:
                     # valid streaming data
                     #streaming pulse data
-                    print("pulse: {}".format(int(inbytes[5] & 0x7f)))
-                    print("heart: {}".format(int(inbytes[3] & 0x7f)))
 
-                    #print("spO: {}".format(int(inbytes[6] & 0x7f)))
-                    #print("SpO2: {} ".format(int(inbytes[4])))
-                    #print(chartx((inbytes[3] & 0x7F)/100.,80)) 
-                    #print([inbytes[n] & 0x7F for n in [3,4,5,6]])
-                    sys.stdout.flush()
-                    #logfile.write("{},".format(time.time()))
+
                     logfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(*[inbytes[n] & 0x7F for n in range(8)]))
+                    for i in range(0,6,2):
+                        
+                        logfile.write("{}, {}, {}, {}\n".format(seconds,
+                                                          inbytes[1],
+                                                          0x7F & inbytes[2 + i],
+                                                          0x7F & inbytes[3 + i]))
+                        seconds += 1
+                                    
+
                     logfile.flush()
                 else:
                     sys.stderr.write("Waiting for valid data\n")
             else:
-                print("got " + str(inbytes))
+                print("parse? got " + str(inbytes))
+
+            if (seconds % 60 == 0):
+                minutes += 1
+                print("downloaded {} minutes".format(minutes))
+            
+
             time.sleep(0.0001)
             
             if packet_count % 100 == 0:

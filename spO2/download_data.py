@@ -79,6 +79,8 @@ packets will be 1/3 the time of the stored data in
 seconds. Unrecognized pulse/SpO2 (because of finger out or bad
 readings are zero.
 
+The second byte is used for flags, not all are understood. The even-numbered bits are overflow bits to recover values greater than 127 in the pulse. which are masked by the set high bit. As far as I can figure it out, bit 1 set -> add 127 to P0, bit 3 set _> add 127 to P1, bit 5 set -> add 127 to P2 
+
 Sometimes the 80 in the second byte has a bit set, this may indicate bad data. 
 
 """
@@ -97,12 +99,12 @@ if __name__ == '__main__':
     #portname = "COM7"
     portbaud = 115200
     try:
-        ser = serial.Serial(portname, portbaud, timeout=2.0)
+        ser = serial.Serial(portname, portbaud, timeout=0.1)
     except:
         print('Error opening device at ' + portname)
         print('Edit file to reflect serial port of device')
         raise
-    ser = serial.Serial(portname, portbaud, timeout=0.0)
+
     sys.stderr.write('opened port {}\n'.format(portname))
 
     if len(sys.argv) > 1:
@@ -145,13 +147,16 @@ if __name__ == '__main__':
                     #streaming pulse data
 
 
-                    logfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(*[inbytes[n] & 0x7F for n in range(8)]))
+                    logfile.write("{:x}, {:x}, {:x}, {:x}, {:x}, {:x}, {:x}, {:x}\n".format(*[inbytes[n]  for n in range(8)]))
                     for i in range(0,6,2):
-                        
+                        pulse = 0x7F & inbytes[3 + i]
+                        #logfile.write("pulse bits: {:08b}\n".format(inbytes[1]))
+                        #logfile.write(" mask bits: {:08b}\n".format(1 << i+1))
+                        if inbytes[1] & (1 << i+1):
+                            pulse += 128
                         logfile.write("{}, {}, {}, {}\n".format(seconds,
                                                           inbytes[1],
-                                                          0x7F & inbytes[2 + i],
-                                                          0x7F & inbytes[3 + i]))
+                                                          0x7F & inbytes[2 + i],                                                          pulse))
                         seconds += 1
                                     
 

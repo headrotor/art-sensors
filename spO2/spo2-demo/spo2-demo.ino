@@ -129,6 +129,7 @@ void loop() {
     FastLED.delay(2);
   }
 
+  
   fadeToBlackBy( leds, NUM_LEDS, 20);
   FastLED.show();
 
@@ -146,7 +147,7 @@ void get_serial() {
   count++;
   timeout++;
 
-  if (timeout == 100) {
+  if (timeout > 100) {
     Serial.println("timeout!");
     beat = -1;
   }
@@ -155,6 +156,7 @@ void get_serial() {
   while (Serial1.available()) {
     digitalWrite(led, HIGH);
     parse_byte(Serial1.read());
+    timeout = 0;
   }
 }
 

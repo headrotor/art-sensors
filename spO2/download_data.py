@@ -27,6 +27,7 @@ import serial
 import sys
 import time
 import argparse
+import os
 
 
 """For downloaded (stored) data, data comes from device in 8 byte
@@ -70,9 +71,15 @@ if __name__ == '__main__':
     parser.add_argument('--port', '-p', nargs='?',
                         default="/dev/ttyUSB0",
                         help='Serial port name, e.g. COM3, /dev/ttyUSB0')
-    parser.add_argument('--raw','-r',
+    parser.add_argument('--raw_hex','-x',
                         action='store_true',
-                        help='Dump raw data as hex bytes to stdout' )
+                        help='Print raw data as hex bytes to .raw file' )
+    parser.add_argument('--raw_dec','-r',
+                        action='store_true',
+                        help='Print raw data as decimal bytes to .raw file' )
+    parser.add_argument('--debug','-d',
+                        action='store_true',
+                        help='write raw data with cooked data' )
     parser.add_argument('--quiet','-q',
                         action='store_true',
                         help='Do not print progress and info to stderr')
@@ -95,9 +102,19 @@ if __name__ == '__main__':
     if not args.quiet:
         sys.stderr.write('opened port {}\n'.format(args.port))
 
+
     logfile = open(args.output_file, 'w')
     if not args.quiet:
         sys.stderr.write("Writing data to file {}\n".format(args.output_file))
+
+
+    rawfile = None
+    if args.raw_hex or args.raw_dec:
+        rawfn, ext = os.path.splitext(args.output_file)
+        rawfn = rawfn + ".raw"
+        rawfile = open(rawfn, 'w')
+        if not args.quiet:
+            sys.stderr.write("Writing raw data to file {}\n".format(rawfn))
 
      
     logfile.write("seconds, flags, spO2 (%), pulse (bpm)\n".format(time.time()))
@@ -131,22 +148,27 @@ if __name__ == '__main__':
                     # valid streaming data
                     #streaming pulse data
 
-                    if args.raw:
-                        print("{:x}, {:x}, {:x}, {:x}, {:x}, {:x}, {:x}, {:x}".format(*[inbytes[n]  for n in range(8)]))
+                    format_str = "".join("{:03d} " * 8)
+                    if args.raw_hex:
+                        format_str = "".join("{:02x} " * 8)
+                    format_str = format_str + "\n"
 
+                    if rawfile is not None: 
+                        rawfile.write(format_str.format(*[inbytes[n]  for n in range(8)]))
+                    if args.debug:
+                        logfile.write(format_str.format(*[inbytes[n]  for n in range(8)]))
 
                     for i in range(0,6,2):
                         pulse = 0x7F & inbytes[3 + i]
-                        #logfile.write("pulse bits: {:08b}\n".format(inbytes[1]))
-                        #logfile.write(" mask bits: {:08b}\n".format(1 << i+1))
+                        #print("pulse bits: {:08b}\n".format(inbytes[1]))
+                        #print(" mask bits: {:08b}\n".format(1 << i+1))
                         if inbytes[1] & (1 << i+1):
-                            pulse += 128
-                        logfile.write("{}, {}, {}, {}\n".format(seconds,
+                            pulse += 127
+                        cookedstr = "{}, {}, {}, {}".format(seconds,
                                                           inbytes[1],
-                                                          0x7F & inbytes[2 + i],                                                          pulse))
+                                                          0x7F & inbytes[2 + i],                                                          pulse)
+                        logfile.write(cookedstr + "\n")
                         seconds += 1
-                                    
-
                     logfile.flush()
                 else:
                     if not args.quiet:

@@ -79,7 +79,7 @@ cmd2 = "7d 81 af 80 80 80 80 80 80"
 
 if __name__ == '__main__':
 
-    portname = "/dev/ttyUSB1"
+    portname = "/dev/ttyUSB0"
     #portname = "COM7"
     portbaud = 115200
     try:

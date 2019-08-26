@@ -16,8 +16,12 @@ def setled(ser, color):
         #    foo = ser.read(1)
         ser.flush()
 
-ser = serial.Serial('COM4',19200,timeout=0.1)  # open serial port
-
+try:
+    ser = serial.Serial('COM4',19200,timeout=0.1)  # open serial port
+except serial.SerialException as e:
+    time.sleep(5)
+    raise e
+    
 ser.write(b'F10\r\n')
 setled(ser, b'#FF00FF\r\n')     # turn LED blue for startup
 

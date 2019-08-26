@@ -24,8 +24,8 @@ elif platform.startswith('linux'):
 # proportional to number of steps per rotation, kind of arbitrary
 step_factor = 300
 
-motor_low = 500
-motor_range = 1600
+motor_low = 200
+motor_range = 1800
 
 
 
@@ -36,8 +36,12 @@ gain = 10.
 hipass = 0.985
 envelope_hipass = 0.992
 
-ser = serial.Serial('COM3', 115200, timeout=0)
-
+try:
+    ser = serial.Serial('COM5', 115200, timeout=0)
+except serial.SerialException as e:
+    time.sleep(5)
+    raise e
+    
 wlbt = load_source('WalabotAPI', modulePath)
 
 wlbt.Init()

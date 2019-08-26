@@ -71,6 +71,9 @@ logfn = "contec.log"
 # starts streaming real-time data (pulse)
 cmd1 = "7D 81 A1 80 80 80 80 80 80"
 
+# starts downloading stored data
+cmd1 = "7D 81 A6 80 80 80 80 80 80"
+
 # sent periodically by host --  Keep-alive? May not need this. 
 cmd2 = "7d 81 af 80 80 80 80 80 80"
 
@@ -120,16 +123,17 @@ if __name__ == '__main__':
                 if inbytes[1] == 0xE0:
                     # valid streaming data
                     #streaming pulse data
-                    #print("pulse: {}".format(int(inbytes[5] & 0x7f)))
-                    #print("heart: {}".format(int(inbytes[3] & 0x7f)))
+                    print("pulse: {}".format(int(inbytes[5] & 0x7f)))
+                    print("heart: {}".format(int(inbytes[3] & 0x7f)))
 
                     #print("spO: {}".format(int(inbytes[6] & 0x7f)))
                     #print("SpO2: {} ".format(int(inbytes[4])))
-                    print(chartx((inbytes[3] & 0x7F)/100.,80)) 
+                    #print(chartx((inbytes[3] & 0x7F)/100.,80)) 
                     #print([inbytes[n] & 0x7F for n in [3,4,5,6]])
                     sys.stdout.flush()
                     logfile.write("{},".format(time.time()))
                     logfile.write("{},{},{},{},{}\n".format(*[inbytes[n] & 0x7F for n in [2,3,4,5,6]]))
+                    logfile.flush()
                 else:
                     sys.stderr.write("Waiting for valid data\n")
             else:
@@ -139,7 +143,7 @@ if __name__ == '__main__':
             if packet_count % 100 == 0:
                 #print("sent cms2")
                 ser.write(cmd2)
-                sys.stderr.write("wrote {} packets to {}\n".format((count,logfn)))
+                sys.stderr.write("wrote {} packets to {}\n".format(packet_count,logfn))
                 sys.stderr.flush()
                 
         else: # waiting for serial data, if there is no more than we are done.
@@ -149,5 +153,6 @@ if __name__ == '__main__':
                 keep_going = False
                 break
             time.sleep(0.01)
+    logfile.close()
     sys.stderr.write("Finished.\n")
     exit(0)

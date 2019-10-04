@@ -61,7 +61,17 @@ void setup() {
   Serial.begin(9600);
   Serial.println("SCD30 Example");
 
+
+
   airSensor.begin();
+
+  airSensor.setMeasurementInterval(2); //Change number of seconds between measurements: 2 to 1800 (30 minutes)
+
+  //My desk is ~1600m above sealevel
+  //airSensor.setAltitudeCompensation(1600); //Set altitude of the sensor in m
+
+  //Pressure in Boulder, CO is 24.65inHg or 834.74mBar
+  //airSensor.setAmbientPressure(835); //Current ambient pressure in mBar: 700 to 1200
 
   delay(100);
 
@@ -125,10 +135,16 @@ void loop() {
 }
 
 
+// Compute Y value for given PPM of CO2
+int get_ppm_y( int ppm) {
 
+  return (240 - (int) (240.*ppm) / (float)(PPM_MAX));
+}
+#define FSTR_LEN 16
 void plot_array() {
 
   int buf[318];
+  char fstr[FSTR_LEN];
   int x, x2;
   int y, y2;
   int r;
@@ -148,27 +164,42 @@ void plot_array() {
 
   */
 
+  // draw blue frame
   M5.Lcd.drawRect(0, 14, 319, 211, TFT_BLUE);
 
-  // Draw crosshairs
-  M5.Lcd.drawLine(159, 15, 159, 224, TFT_BLUE);
-  M5.Lcd.drawLine(1, 119, 318, 119, TFT_BLUE);
-  for (int i = 9; i < 310; i += 10)
-    M5.Lcd.drawLine(i, 117, i, 121, TFT_BLUE);
-  for (int i = 19; i < 220; i += 10)
-    M5.Lcd.drawLine(157, i, 161, i, TFT_BLUE);
+  // Draw center crosshairs
+  //M5.Lcd.drawLine(159, 15, 159, 224, TFT_BLUE);
+  //M5.Lcd.drawLine(1, 119, 318, 119, TFT_BLUE);
 
+  // draw X tick marks
+  //for (int i = 9; i < 310; i += 10)
+  //  M5.Lcd.drawLine(i, 117, i, 121, TFT_BLUE);
+
+  // draw Y tick marks
+  for (int i = 200; i < PPM_MAX; i += 200) {
+
+    y2 = get_ppm_y(i);
+    M5.Lcd.drawLine(310, y2, 319, y2, TFT_BLUE);
+  }
   // Draw data,
   M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 
+
+
+  M5.Lcd.setFreeFont(FF1);
   M5.Lcd.drawString("CO2", 5, 15, 2);
 
-  M5.Lcd.drawString("0 ppm", 300, 225, 2);
+  M5.Lcd.drawString("400", 300, get_ppm_y(400) + 2, 2);
   M5.Lcd.drawString("2000", 300, 15, 2);
 
 
-  int oldx = 0;
-  int oldy =  240 - (int) 240.*(Air_val[0]) / (float)(PPM_MAX);
+
+  // draw green line at 400 ppm
+  M5.Lcd.drawLine(1, get_ppm_y(400), 318, get_ppm_y(400), TFT_GREEN);
+
+  int oldx = 1;
+  int oldy =  get_ppm_y(Air_val[0]);
+
 
   for (int i = 1; i < 320; i++)
   {
@@ -178,17 +209,21 @@ void plot_array() {
     }
 
     if (i == dcount - 1) {
-      M5.Lcd.fillCircle(i, y, 5, TFT_RED);
+      M5.Lcd.fillCircle(i, y, 2, TFT_RED);
       oldx = i;
       oldy = y;
     }
 
-    M5.Lcd.drawLine(i, y, oldx, oldy, (i >= dcount) ? (TFT_BLUE) : (TFT_CYAN));
-    //M5.Lcd.fillCircle(oldx, oldy, 10, TFT_RED);
+
+    if (i < dcount) {
+      M5.Lcd.drawLine(i, y, oldx, oldy, (i >= dcount) ? (TFT_BLUE) : (TFT_CYAN));
+    }
 
     oldx = i;
     oldy = y;
-    //M5.Lcd.drawPixel(i, 119 + (sin(((i * 1.13) * 3.14) / 180) * 95), TFT_CYAN);
   }
-  //M5.Lcd.fillCircle(oldx, oldy, 5, TFT_RED);
+  M5.Lcd.setFreeFont(FF18);
+  sprintf(fstr, "%d ppm CO2", Air_val[dcount - 1]);
+  M5.Lcd.drawString(fstr, 10, 210, GFXFF);
+
 }

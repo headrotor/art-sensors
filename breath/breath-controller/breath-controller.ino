@@ -78,12 +78,13 @@ StepControl<> controller;    // Use default settings
 #define PPR (4000)
 
 // for sensor
-#define MOTOR_MIN 300
+#define MOTOR_MIN 100
 #define MOTOR_RANGE (PPR/2)
 
 // for automatic breathing
-#define MIN_TICKS 500
-#define MAX_TICKS 2500
+// was 500, 2500
+#define MIN_TICKS 100
+#define MAX_TICKS 2100
 
 int auto_speed = 3000;
 int auto_accel = 500;

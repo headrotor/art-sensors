@@ -156,7 +156,8 @@ def BreathingApp():
         #pos_range = 15    
         zpos = (fpos - min_fpos)/pos_range
             
-        pos = int(motor_range*zpos) + motor_low
+        #pos = int(motor_range*zpos) + motor_low
+        pos = int(motor_range*(1-zpos)) + motor_low
         # send the position data to the stepper controller over the serial port
         ser.write("{:d}\n".format(int(pos)).encode('utf-8'))
         ser.flushOutput()

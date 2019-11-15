@@ -181,7 +181,7 @@ void setup() {
   newpos = 0;
   oldpos = 0;
   // Set this position to zero on the motor
-  motor.setPosition(newpos);
+  motor.setPosition(newpos - 200);
   // back off a few degrees?
 
 
@@ -207,8 +207,12 @@ void loop() {
       newpos = 0;
       oldpos = 0;
       //Set this position to zero on the motor
-      motor.setPosition(newpos);
-      delay(1000);
+      motor.setPosition(newpos - 200);
+
+      motor.setTargetAbs(newpos);
+      controller.move(motor);
+
+ 
     }
   }
 

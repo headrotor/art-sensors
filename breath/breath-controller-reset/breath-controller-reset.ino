@@ -212,7 +212,7 @@ void loop() {
       motor.setTargetAbs(newpos);
       controller.move(motor);
 
- 
+
     }
   }
 
@@ -447,20 +447,30 @@ void update_sensor_servo() {
   }
 
 
-  if (abs(diff) > 150)  {
+  //  if (abs(diff) > 150)  {
+  if (abs(diff) > 20)  {
     // quasi PID: set rotation speed to difference (error signal)
     // PID calculation, move with velocity proportional to offset
-    int off = 10 * diff;
+    int offspeed = 10 * diff;
 
-    motor.setPullInSpeed(off);
-    motor.setMaxSpeed(off);
+    if (abs(offspeed) < 1500) {
+    //Serial.println("minspeed");
+      if (offspeed < 0) {
+        offspeed = -1500;
+      } else {
+        offspeed = 1500;
+      }
+    }
+
+    motor.setPullInSpeed(offspeed);
+    motor.setMaxSpeed(offspeed);
     //squeeze.setAcceleration(3200000);
     controller.rotateAsync(motor);
-    //Serial.print("squeeze ");
     //Serial.println(off);
   }
   else {
     //squeeze.setAcceleration(3200000);
+    //Serial.println("stop");
     controller.stop();
 
   }

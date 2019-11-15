@@ -107,9 +107,10 @@ def BreathingApp():
     # available for processing and retrieval.
 
     # floating point position
-    fpos = 0.
+    #fpos = 0.
     max_fpos = -10.
     min_fpos = 10.
+    fpos = max_fpos
     while True:
         appStatus, calibrationProcess = wlbt.GetStatus()
         # 5) Trigger: Scan(sense) according to profile and record signals

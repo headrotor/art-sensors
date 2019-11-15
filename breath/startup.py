@@ -23,7 +23,7 @@ except serial.SerialException as e:
     raise e
     
 ser.write(b'F10\r\n')
-setled(ser, b'#FF00FF\r\n')     # turn LED blue for startup
+setled(ser, b'#FF00FF\r\n')     # turn LED magenta for startup
 
 time.sleep(3)
 
@@ -31,9 +31,9 @@ time.sleep(3)
 count = 0
 while(True):
     #process = subprocess.Popen("python C:\\kalbot\\gith\\art-sensors\\breath\\led.py")
-    setled(ser, b'#00FF00\r\n');
     time.sleep(3)
     process = subprocess.Popen("python C:\\kalbot\\gith\\art-sensors\\breath\\breath.py")
+    setled(ser, b'#00FF00\r\n');    # green means we're running OK
     process.wait()
     setled(ser, b'#FF0000\r\n')     # turn LED red
     print("crashed, restarting")

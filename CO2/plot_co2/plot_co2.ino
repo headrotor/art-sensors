@@ -197,7 +197,7 @@ void plot_array() {
   // draw green line at 400 ppm
   M5.Lcd.drawLine(1, get_ppm_y(400), 318, get_ppm_y(400), TFT_GREEN);
 
-  int oldx = 1;
+  int oldx = 0;
   int oldy =  get_ppm_y(Air_val[0]);
 
 

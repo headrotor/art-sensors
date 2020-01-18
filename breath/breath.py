@@ -107,9 +107,10 @@ def BreathingApp():
     # available for processing and retrieval.
 
     # floating point position
-    fpos = 0.
+    #fpos = 0.
     max_fpos = -10.
     min_fpos = 10.
+    fpos = max_fpos
     while True:
         appStatus, calibrationProcess = wlbt.GetStatus()
         # 5) Trigger: Scan(sense) according to profile and record signals
@@ -156,7 +157,8 @@ def BreathingApp():
         #pos_range = 15    
         zpos = (fpos - min_fpos)/pos_range
             
-        pos = int(motor_range*zpos) + motor_low
+        #pos = int(motor_range*zpos) + motor_low
+        pos = int(motor_range*(1-zpos)) + motor_low
         # send the position data to the stepper controller over the serial port
         ser.write("{:d}\n".format(int(pos)).encode('utf-8'))
         ser.flushOutput()

@@ -1,3 +1,9 @@
+
+
+
+
+#include <M5StickC.h>
+
 #include "BleMidi.h"
 // https://github.com/lathoub/Arduino-BLE-MIDI
 //https://docs.m5stack.com/#/en/core/m5stickc
